@@ -1,0 +1,39 @@
+server:
+  port: 8201
+
+spring:
+  application:
+    name: my-mall-gateway
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        # 注意：替换验证期与原项目共用 same Nacos，注册名用 my-mall-gateway，不要占用 mall-gateway
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      password: root123        # 本机原生 Redis 设了 requirepass
+      timeout: 3000ms
+  # D2 路由（原项目 5 条，等价复刻）——先留空，D2 用 GatewayRouteConfig 代码或这里配置补全
+  # cloud.gateway.server.webflux.routes: ...
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway   # gateway 端点必须暴露，switch.ps1 才能动态切流
+  endpoint:
+    gateway:
+      enabled: true
+      access: read-only          # 只读，避免误删路由；需要动态增删时改成 unrestricted
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: info
+    com.mymall: debug
