@@ -1,0 +1,63 @@
+server:
+  port: 8201
+
+spring:
+  application:
+    name: my-mall-gateway
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      password: root123
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+# ★ 必须与原项目逐项一致：
+#   token-name 决定 Sa-Token 在 Redis 里的 key 前缀（实测原项目 key 形如 Authorization:login:session:3）
+#   token-prefix / is-read-header 决定能否从 Authorization 头解析出 token
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  is-read-header: true
+  is-read-cookie: false
+  timeout: 604800
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
+  is-print: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    gateway:
+      # 注意：新版 Spring Cloud Gateway 里 access 与 enabled 互斥，只能配一个！
+      # 配 access: unrestricted 即可（它蕴含启用）；再写 enabled: true 会导致应用启动失败
+      access: unrestricted
+    health:
+      show-details: always
+
+# 契约自检开关：验证完可以关掉（生产保持 false）
+my-mall:
+  probe:
+    enabled: false
+
+logging:
+  level:
+    root: info
+    com.mymall: debug

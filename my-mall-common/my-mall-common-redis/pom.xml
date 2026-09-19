@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mymall</groupId>
+        <artifactId>my-mall-common</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>my-mall-common-redis</artifactId>
+    <name>my-mall-common-redis</name>
+    <description>Redis 配置，与 mall-swarm 的 BaseRedisConfig 逐项对齐（网关与业务服务共用）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+        <!-- spring-data-redis 里 Jackson 是 optional，必须显式引，否则 Jackson2JsonRedisSerializer 编译不过 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+    </dependencies>
+</project>
