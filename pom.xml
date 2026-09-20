@@ -22,6 +22,7 @@
         <module>my-mall-common</module>
         <module>my-mall-api</module>
         <module>my-mall-gateway</module>
+        <module>my-mall-auth</module>
     </modules>
 
     <properties>

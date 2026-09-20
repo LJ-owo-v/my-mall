@@ -39,10 +39,10 @@ public class SaTokenConfig {
     private static final Logger log = LoggerFactory.getLogger(SaTokenConfig.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** Sa-Token session 里存后台管理员信息的 key（与原项目 AuthConstant.STP_ADMIN_INFO 一致） */
-    public static final String STP_ADMIN_INFO = "adminInfo";
-    /** 会员信息 key（与原项目一致，暂时只做登录校验，不读它） */
-    public static final String STP_MEMBER_INFO = "memberInfo";
+    /** Sa-Token session 里存后台管理员信息的 key（定义收敛到 AuthConstant） */
+    public static final String STP_ADMIN_INFO = com.mymall.common.constant.AuthConstant.STP_ADMIN_INFO;
+    /** 会员信息 key（同上） */
+    public static final String STP_MEMBER_INFO = com.mymall.common.constant.AuthConstant.STP_MEMBER_INFO;
 
     private final IgnoreUrlsProperties ignoreUrlsProperties;
     private final RedisTemplate<String, Object> redisTemplate;

@@ -1,0 +1,51 @@
+server:
+  port: 8401
+  shutdown: graceful            # 优雅停机（原项目没有，净增益）
+
+spring:
+  application:
+    name: my-mall-auth          # 不要占用原项目的 mall-auth，验证期新老可并存
+  profiles:
+    active: dev
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  # ============ Feign 超时（原项目没配，属净增益）============
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 1000      # 下游连不上时 1s 快速失败，而不是默认 10s 干等
+            read-timeout: 3000
+            logger-level: basic
+      # 若要开启熔断（需另加 spring-cloud-starter-circuitbreaker-resilience4j）：
+      # circuitbreaker:
+      #   enabled: true
+
+# ============ OpenAPI 文档（供网关 knife4j 聚合）============
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    doc-expansion: 'none'
+  group-configs:
+    - group: 'default'
+      packages-to-scan: com.mymall.auth.controller
+
+# ============ 健康检查（只暴露必要的，不照抄原项目 include:'*'）============
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: info
+    com.mymall: debug

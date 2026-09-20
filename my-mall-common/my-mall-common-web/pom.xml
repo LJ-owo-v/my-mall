@@ -36,5 +36,11 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
+        <!-- 服务发现 + 负载均衡：Spring Cloud 2025 的 openfeign 不再传递它，
+             缺了会报 "No Feign Client for loadBalancing defined"。所有走 Feign 的业务服务都需要。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
     </dependencies>
 </project>

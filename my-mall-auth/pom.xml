@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mymall</groupId>
+        <artifactId>my-mall</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>my-mall-auth</artifactId>
+    <name>my-mall-auth</name>
+    <description>统一认证中心（替换 mall-auth）：按 clientId 转发到 mall-admin / mall-portal</description>
+
+    <dependencies>
+        <!-- ① 自己的 Web 公共件：已含 common-core(CommonResult) + web + validation + aop + actuator + springdoc，
+               且【不含 Redis】—— 所以不像原项目那样需要 <exclusions> 排除 data-redis -->
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-web</artifactId>
+        </dependency>
+
+        <!-- ② 注册中心：Feign 按服务名发现下游，必须与下游处于同一 namespace -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- ③ 服务间调用（已传递 spring-cloud-starter-loadbalancer，无需另加） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!-- ④ 显式声明 actuator（common-web 已传递，写上更直观；想精简可删） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- ⑤ 测试：父 pom 已统一提供 spring-boot-starter-test，不用重复声明 -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals><goal>repackage</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

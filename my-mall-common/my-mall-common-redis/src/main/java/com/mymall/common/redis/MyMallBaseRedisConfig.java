@@ -27,8 +27,12 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  */
 public class MyMallBaseRedisConfig {
 
-    /** 权限映射表在 Redis 里的 key（与原项目 AuthConstant.PATH_RESOURCE_MAP 一致） */
-    public static final String PATH_RESOURCE_MAP = "auth:pathResourceMap";
+    /**
+     * 权限映射表在 Redis 里的 key。
+     * 定义已收敛到 {@link com.mymall.common.constant.AuthConstant#PATH_RESOURCE_MAP}，
+     * 这里保留同名常量作为别名（网关 SaTokenConfig 已在引用它），避免字面量两处漂移。
+     */
+    public static final String PATH_RESOURCE_MAP = com.mymall.common.constant.AuthConstant.PATH_RESOURCE_MAP;
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {

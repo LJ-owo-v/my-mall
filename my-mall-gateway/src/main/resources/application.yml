@@ -10,6 +10,7 @@ spring:
     nacos:
       discovery:
         server-addr: localhost:8848      # 与原项目同一个 Nacos；注册名用自己的，验证期可并存
+        namespace: 9883b8e5-fd64-49bc-8e24-d21d5690b8d0
     gateway:
       server:
         webflux:

@@ -19,6 +19,9 @@ import java.util.UUID;
  *
  * 传递方式：写回请求头（下游服务读取后写进自己的日志）→ 全链路可串；
  *          同时写响应头，方便用户/脚本报出 traceId。
+ *          后续接入skywalking，把生成x-Trace-id改成在skywalking获取
+ *          response.getHeaders().set("X-Trace-Id", TraceContext.traceId());
+ *          后期替换为 skywalking，淘汰tracefilter
  */
 @Component
 public class TraceIdFilter implements WebFilter, Ordered {
