@@ -1,5 +1,6 @@
 server:
   port: 8201
+  shutdown: graceful
 
 spring:
   application:
@@ -18,7 +19,7 @@ spring:
           # 避免把所有注册服务（含 monitor）自动暴露成路由
           routes:
             - id: mall-auth
-              uri: lb://mall-auth
+              uri: lb://my-mall-auth
               predicates:
                 - Path=/mall-auth/**
               filters:
