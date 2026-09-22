@@ -42,5 +42,17 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-redis</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>5.8.47</version> <!-- 请替换为最新版本 -->
+        </dependency>
+
     </dependencies>
 </project>

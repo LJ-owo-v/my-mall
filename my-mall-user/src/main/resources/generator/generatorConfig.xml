@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE generatorConfiguration
+        PUBLIC "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+        "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+
+<!--
+  MyBatis Generator 配置（只生成"用户域"的表，不建共享 mbg 模块 —— 数据私有原则）
+
+  ★ 执行方式（重要）：
+      cd F:\github-code\MALL\my-mall\my-mall-user
+      mvn mybatis-generator:generate
+    因为 targetProject 是"相对当前工作目录"的，从模块目录执行才落到正确位置。
+    若坚持从仓库根目录执行，请把下面的 targetProject 改成：
+      my-mall-user/src/main/java 与 my-mall-user/src/main/resources
+
+  生成结果：
+    PO/Example → my-mall-user/src/main/java/com/mymall/user/model
+    Mapper 接口 → my-mall-user/src/main/java/com/mymall/user/dao
+    Mapper XML → my-mall-user/src/main/resources/dao
+  与 application.yml 的 mybatis.mapper-locations=classpath:dao/*.xml、
+  启动类 @MapperScan("com.mymall.user.dao") 完全对齐。
+-->
+<generatorConfiguration>
+    <context id="MySqlContext" targetRuntime="MyBatis3" defaultModelType="flat">
+        <property name="beginningDelimiter" value="`"/>
+        <property name="endingDelimiter" value="`"/>
+        <property name="javaFileEncoding" value="UTF-8"/>
+
+        <!-- 为模型生成序列化方法 / toString；避免把生成的 XML 与手写 XML 合并 -->
+        <plugin type="org.mybatis.generator.plugins.SerializablePlugin"/>
+        <plugin type="org.mybatis.generator.plugins.ToStringPlugin"/>
+        <plugin type="org.mybatis.generator.plugins.UnmergeableXmlMappersPlugin"/>
+
+        <commentGenerator>
+            <!-- 保留数据库里的字段注释（addRemarkComments）+ 去掉时间戳，避免每次生成都产生 diff -->
+            <property name="suppressAllComments" value="false"/>
+            <property name="suppressDate" value="true"/>
+            <property name="addRemarkComments" value="true"/>
+        </commentGenerator>
+
+        <jdbcConnection driverClass="com.mysql.cj.jdbc.Driver"
+                        connectionURL="jdbc:mysql://localhost:3306/mall?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=Asia/Shanghai&amp;useSSL=false"
+                        userId="root"
+                        password="123456">
+            <!-- 解决 mysql 驱动 8+ 不生成指定数据库代码的问题 -->
+            <property name="nullCatalogMeansCurrent" value="true"/>
+        </jdbcConnection>
+
+        <javaTypeResolver>
+            <property name="forceBigDecimals" value="false"/>
+        </javaTypeResolver>
+
+        <javaModelGenerator targetPackage="com.mymall.user.model" targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+            <property name="trimStrings" value="true"/>
+        </javaModelGenerator>
+
+        <sqlMapGenerator targetPackage="dao" targetProject="src/main/resources">
+            <property name="enableSubPackages" value="false"/>
+        </sqlMapGenerator>
+
+        <javaClientGenerator type="XMLMAPPER" targetPackage="com.mymall.user.dao"
+                             targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+        </javaClientGenerator>
+
+        <!-- ============ D4 必需（6 张）============ -->
+        <table tableName="ums_admin" domainObjectName="UmsAdmin">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_admin_role_relation" domainObjectName="UmsAdminRoleRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_admin_login_log" domainObjectName="UmsAdminLoginLog">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_role" domainObjectName="UmsRole">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_resource" domainObjectName="UmsResource">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <!-- ums_menu 只要 PO（/admin/info 的 menus 返回类型），Example/Mapper 一起生成也无害 -->
+        <table tableName="ums_menu" domainObjectName="UmsMenu">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+
+        <!-- ============ 可选：备 D5（/role/**、/resource/**、/menu/**）============
+        <table tableName="ums_role_resource_relation" domainObjectName="UmsRoleResourceRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_role_menu_relation" domainObjectName="UmsRoleMenuRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_resource_category" domainObjectName="UmsResourceCategory">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        -->
+    </context>
+</generatorConfiguration>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 父工程：统一管 Spring Boot 3.5.14 / Spring Cloud 2025.0.2 / SCA 2025.0.0.0 / 各依赖版本 -->
+    <parent>
+        <groupId>com.mymall</groupId>
+        <artifactId>my-mall</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>my-mall-user</artifactId>
+    <name>my-mall-user</name>
+    <description>用户与权限服务（8086）：绞杀者模式替换 mall-admin 的 /admin/** 接口</description>
+
+    <dependencies>
+        <!-- ==================== ① 自己的 Web 公共件 ==================== -->
+        <!-- 已含：common-core(CommonResult/CommonPage/ResultCode/BizException/AuthConstant)
+                 + starter-web + validation + aop + actuator + springdoc + loadbalancer
+                 注意：它【不含 spring-boot-starter-data-redis】，所以不像原项目那样要做 exclusion -->
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-web</artifactId>
+        </dependency>
+
+        <!-- ==================== ② Redis（Sa-Token 的会话存储，必须与网关同库同序列化）==================== -->
+        <!-- 已含：spring-boot-starter-data-redis + commons-pool2 + jackson-databind
+                 本模块用 RedisConfig extends MyMallBaseRedisConfig 拿到 RedisTemplate<String,Object> -->
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-redis</artifactId>
+        </dependency>
+
+        <!-- ==================== ③ 注册中心 ==================== -->
+        <!-- 必须与原项目处于同一 namespace，否则网关 lb://my-mall-user 与下游调用都会失败 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- 需要调其他微服务时再打开（openfeign 会自动带 loadbalancer；本阶段 /admin/** 用不到）
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        -->
+
+        <!-- ==================== ④ 持久层（D4 的核心新增；原项目由共享 mall-mbg 提供）==================== -->
+        <!-- 我这边不建共享 mbg 模块，改为在本服务内直接用 MBG 生成 ums_* 的表，避免"共享库"耦合 -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.pagehelper</groupId>
+            <artifactId>pagehelper-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid-spring-boot-3-starter</artifactId>
+        </dependency>
+        <!-- 驱动只在运行期需要，编译期不引用 com.mysql.cj.* 时用 runtime 即可 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ==================== ⑤ Sa-Token（与原 mall-admin 逐项对齐）==================== -->
+        <!-- ★ 三件套一个都不能少：
+             spring-boot3-starter -> 让 Sa-Token 在 Servlet 栈生效（网关才是 reactor 版，别搞混）
+             redis-jackson        -> 会话写进 Redis，网关才能校验同一个 token（并传递注解式鉴权需要的 DAO）
+             jwt                  -> token 变成 JWT 格式（原项目 token 长度 183 就是因为它） -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-redis-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-jwt</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 可执行 fat jar -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- MyBatis Generator：只生成本服务负责的 ums_* 表 —— 不搞共享 mbg，避免耦合
+                 用法：mvn -pl my-mall-user mybatis-generator:generate
+                 重复生成不会覆盖手写代码，但会覆盖 PO/Mapper 上被手工改过的内容，改前先提交 -->
+            <plugin>
+                <groupId>org.mybatis.generator</groupId>
+                <artifactId>mybatis-generator-maven-plugin</artifactId>
+                <version>${mybatis-generator.version}</version>
+                <configuration>
+                    <configurationFile>src/main/resources/generator/generatorConfig.xml</configurationFile>
+                    <overwrite>true</overwrite>
+                    <verbose>true</verbose>
+                </configuration>
+                <dependencies>
+                    <!-- MBG 插件自己有类加载器，驱动必须单独给 -->
+                    <dependency>
+                        <groupId>com.mysql</groupId>
+                        <artifactId>mysql-connector-j</artifactId>
+                        <version>${mysql-connector.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
+    </build>
+</project>
