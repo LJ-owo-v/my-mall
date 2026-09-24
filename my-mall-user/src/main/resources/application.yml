@@ -20,6 +20,7 @@ spring:
       password: root123
       timeout: 5000ms
 
+
 # ★ Sa-Token 配置必须与网关/原 mall-admin 完全一致
 sa-token:
   token-name: Authorization
@@ -42,6 +43,16 @@ mybatis:
     - classpath:dao/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+# ★8 用户缓存三属性：UmsAdminCacheServiceImpl 用 @Value 注入且无默认值，缺一个就启动失败
+redis:
+  database: mall-swarm
+  key:
+    # ★9 灰度期缓存隔离：不复用老 mall-admin 的 ums:admin
+    #    原因：Redis 存的是带 "@class" 的 JSON，两个服务写同一个 key 会互相读到对方包名的 PO
+    admin: my-ums:admin
+  expire:
+    common: 86400
 
 # PageHelper
 pagehelper:
