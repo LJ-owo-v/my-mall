@@ -29,7 +29,13 @@ import java.util.stream.Collectors;
 
 
 /**
- * 12个接口
+ * 12个接口，
+ * 完成后台用户登入功能
+ * 能力	                                                                对应原端点
+ * 后台管理员登录（签发 token + 写 session + 登录日志）、登出、当前登录用户信息	/admin/login、/admin/logout、/admin/info
+ * 管理员增删改查（注册/分页列表/详情/修改/删除）	                            /admin/register、/admin/list、/admin/{id}、/admin/update/{id}、/admin/delete/{id}
+ * 改密码、改状态	                                                        /admin/updatePassword、/admin/updateStatus/{id}
+ * 给用户分配角色、查用户角色	                                            /admin/role/update、/admin/role/{adminId}
  */
 @Controller
 @Tag(name = "AdminController", description = "后台用户管理")
@@ -45,7 +51,7 @@ public class AdminController {
     private String tokenHead;
 
 
-    private static final String DEFAULT_PAGE_SIZE = "10";
+    private static final String DEFAULT_PAGE_SIZE = "5";
     private static final String DEFAULT_PAGE_NUM = "1";
 
 
@@ -113,7 +119,7 @@ public class AdminController {
     @ResponseBody
     public CommonResult<Object> logout() {
         adminService.logout();
-        return CommonResult.success("登出成功");
+        return CommonResult.success(null);
     }
 
     //获取用户列表（带可选模糊搜索条件的分页列表接口）
@@ -169,7 +175,7 @@ public class AdminController {
     @RequestMapping(value = "/updatePassword", method = RequestMethod.POST)  // POST /admin/updatePassword
     @ResponseBody
     public CommonResult<Integer> updatePassword(
-            @Validated @RequestBody UpdateAdminPasswordParam updatePasswordParam  // 接收旧密码+新密码，触发参数校验
+            @RequestBody UpdateAdminPasswordParam updatePasswordParam  // 接收旧密码+新密码，触发参数校验
     ) {
         // 1. 调 Service 执行密码修改，Service 内部从 Sa-Token 会话取当前用户 id，不需要前端传
         int status = adminService.updatePassword(updatePasswordParam);
@@ -186,6 +192,32 @@ public class AdminController {
         } else {
             return CommonResult.failed();                   // 其他未知错误
         }
+    }
+
+    //删除指定用户信息
+    @Operation(summary = "删除指定用户信息")
+    @RequestMapping(value = "/delete/{id}", method = RequestMethod.POST)
+    @ResponseBody
+    public CommonResult<Integer> delete(@PathVariable Long id) {
+        int count = adminService.delete(id);
+        if (count > 0) {
+            return CommonResult.success(count);
+        }
+        return CommonResult.failed();
+    }
+
+    //修改帐号状态
+    @Operation(summary = "修改帐号状态")
+    @RequestMapping(value = "/updateStatus/{id}", method = RequestMethod.POST)
+    @ResponseBody
+    public CommonResult<Integer> updateStatus(@PathVariable Long id, @RequestParam(value = "status") Integer status) {
+        UmsAdmin umsAdmin = new UmsAdmin();
+        umsAdmin.setStatus(status);
+        int count = adminService.update(id, umsAdmin);
+        if (count > 0) {
+            return CommonResult.success(count);
+        }
+        return CommonResult.failed();
     }
 
     //给用户分配角色(可以有多个角色)

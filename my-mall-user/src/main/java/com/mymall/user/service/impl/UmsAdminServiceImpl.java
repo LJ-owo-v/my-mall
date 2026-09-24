@@ -381,4 +381,10 @@ public  class UmsAdminServiceImpl implements UmsAdminService {
     }
 
 
+    @Override
+    public int delete(Long id) {
+        int count = adminMapper.deleteByPrimaryKey(id);
+        adminCacheService.delAdmin(id);
+        return count;
+    }
 }

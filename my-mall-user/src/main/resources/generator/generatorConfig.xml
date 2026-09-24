@@ -96,5 +96,17 @@
             <generatedKey column="id" sqlStatement="MySql" identity="true"/>
         </table>
         -->
+        <table tableName="ums_resource_category" domainObjectName="UmsResourceCategory">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_member_level" domainObjectName="UmsMemberLevel">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_role_menu_relation" domainObjectName="UmsRoleMenuRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="ums_role_resource_relation" domainObjectName="UmsRoleResourceRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
     </context>
 </generatorConfiguration>

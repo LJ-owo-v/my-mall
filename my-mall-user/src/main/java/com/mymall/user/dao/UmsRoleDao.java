@@ -1,6 +1,7 @@
 package com.mymall.user.dao;
 
 import com.mymall.user.model.UmsMenu;
+import com.mymall.user.model.UmsResource;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
@@ -16,4 +17,8 @@ public interface UmsRoleDao {
 
     /** 根据后台用户 id 获取其可访问菜单（admin_role → role → role_menu → menu） */
     List<UmsMenu> getMenuList(@Param("adminId") Long adminId);
+
+    // UmsRoleDao.java 追加
+    List<UmsMenu> getMenuListByRoleId(@Param("roleId") Long roleId);        // /role/listMenu/{roleId}
+    List<UmsResource> getResourceListByRoleId(@Param("roleId") Long roleId); // /role/listResource/{roleId}
 }

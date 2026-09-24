@@ -93,7 +93,4 @@ public interface UmsAdminMapper {
      * @mbg.generated
      */
     int updateByPrimaryKey(UmsAdmin row);
-
-
-
 }

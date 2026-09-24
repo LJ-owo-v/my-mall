@@ -6,14 +6,13 @@ import com.mymall.user.domain.UpdateAdminPasswordParam;
 import com.mymall.user.model.UmsAdmin;
 import com.mymall.user.model.UmsResource;
 import com.mymall.user.model.UmsRole;
-import jakarta.validation.constraints.NotEmpty;
 
 import java.util.List;
 
 public interface UmsAdminService  {
     UmsAdmin getAdminByUsername(String username);
     UmsAdmin register(UmsAdminParam umsAdminParam);
-    SaTokenInfo login(@NotEmpty String username, @NotEmpty String password);
+    SaTokenInfo login(String username, String password);
 
     /** 获取指定用户的可访问资源（登录时算 permissionList） */
     List<UmsResource> getResourceList(Long adminId);
@@ -34,4 +33,7 @@ public interface UmsAdminService  {
     int updatePassword(UpdateAdminPasswordParam updatePasswordParam);
 
     int updateRole(Long adminId, List<Long> roleIds);
+
+    /** 删除指定用户（/admin/delete/{id}） */
+    int delete(Long id);
 }
