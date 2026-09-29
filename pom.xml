@@ -24,6 +24,7 @@
         <module>my-mall-gateway</module>
         <module>my-mall-auth</module>
         <module>my-mall-user</module>
+        <module>my-mall-product</module>
     </modules>
 
     <properties>

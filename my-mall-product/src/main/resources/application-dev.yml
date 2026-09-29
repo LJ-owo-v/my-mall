@@ -1,0 +1,12 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        # 用 localhost（Nacos 容器把 8848 发布在宿主机）
+        # ★ 不要抄老项目的 192.168.141.1（WSL 网卡地址，重启后可能变）
+        server-addr: localhost:8848
+        namespace: 9883b8e5-fd64-49bc-8e24-d21d5690b8d0
+
+logging:
+  level:
+    com.mymall.product: debug

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mymall</groupId>
+        <artifactId>my-mall</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>my-mall-product</artifactId>
+    <name>my-mall-product</name>
+    <description>商品与内容域服务（8087）：接管 /mall-admin/{product,brand,productCategory,productAttribute,sku,subject,prefrenceArea}/**</description>
+
+    <dependencies>
+        <!-- ① 公共 Web 件：统一响应/全局异常/TraceId/validation/springdoc/actuator/loadbalancer -->
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-web</artifactId>
+            <exclusions>
+                <!-- ★ 排除传递进来的 common-redis：
+                     本模块不使用 Redis，但 common-web 会传递引入 common-redis，
+                     而 RedisServiceImpl 上有 @Service → 组件扫描会强制创建该 Bean，
+                     因缺少 RedisTemplate<String,Object> 直接启动失败（实测）。
+                     与 mall-swarm 里 mall-auth 排除 spring-boot-starter-data-redis 同一手法。
+                     排除后本模块 classpath 干净，且不影响 auth/user/gateway。 -->
+                <exclusion>
+                    <groupId>com.mymall</groupId>
+                    <artifactId>my-mall-common-redis</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- ② 注册中心：必须与原服务同一 namespace -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- ③ 持久层 -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.pagehelper</groupId>
+            <artifactId>pagehelper-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid-spring-boot-3-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- 说明：本模块暂不需要 common-redis（不碰缓存/会话）与 sa-token（鉴权在网关）。
+             将来要用再加，并遵循 docs/ai/90-new-module.md 第 4 步的"按需最小集"原则。 -->
+<!--        <dependency>-->
+<!--            <groupId>cn.dev33</groupId>-->
+<!--            <artifactId>sa-token-spring-boot3-starter</artifactId>-->
+<!--        </dependency>-->
+<!--        <dependency>-->
+<!--            <groupId>cn.dev33</groupId>-->
+<!--            <artifactId>sa-token-redis-template</artifactId>-->
+<!--        </dependency>-->
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals><goal>repackage</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- MyBatis Generator：只生成商品/内容域的表（数据私有）
+                 执行： cd my-mall-product  →  mvn mybatis-generator:generate -->
+            <plugin>
+                <groupId>org.mybatis.generator</groupId>
+                <artifactId>mybatis-generator-maven-plugin</artifactId>
+                <version>${mybatis-generator.version}</version>
+                <configuration>
+                    <configurationFile>src/main/resources/generator/generatorConfig.xml</configurationFile>
+                    <overwrite>true</overwrite>
+                    <verbose>true</verbose>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.mysql</groupId>
+                        <artifactId>mysql-connector-j</artifactId>
+                        <version>${mysql-connector.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
+    </build>
+</project>

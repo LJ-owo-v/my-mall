@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE generatorConfiguration
+        PUBLIC "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+        "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+<!--
+  MyBatis Generator 配置 —— 只生成"商品/内容域"的 17 张表（数据私有原则）
+
+  ★ 执行方式（必须在模块目录里执行，targetProject 是相对当前工作目录的）：
+      cd F:\github-code\MALL\my-mall\my-mall-product
+      mvn mybatis-generator:generate
+
+  生成结果：
+    PO/Example  → my-mall-product/src/main/java/com/mymall/product/model
+    Mapper 接口 → my-mall-product/src/main/java/com/mymall/product/dao
+    Mapper XML  → my-mall-product/src/main/resources/dao
+  与 application.yml 的 mybatis.mapper-locations=classpath:dao/*.xml、
+  启动类 @MapperScan("com.mymall.product.dao") 完全对齐。
+-->
+<generatorConfiguration>
+    <context id="MySqlContext" targetRuntime="MyBatis3" defaultModelType="flat">
+        <property name="beginningDelimiter" value="`"/>
+        <property name="endingDelimiter" value="`"/>
+        <property name="javaFileEncoding" value="UTF-8"/>
+
+        <plugin type="org.mybatis.generator.plugins.SerializablePlugin"/>
+        <plugin type="org.mybatis.generator.plugins.ToStringPlugin"/>
+        <plugin type="org.mybatis.generator.plugins.UnmergeableXmlMappersPlugin"/>
+
+        <commentGenerator>
+            <property name="suppressAllComments" value="false"/>
+            <property name="suppressDate" value="true"/>
+            <property name="addRemarkComments" value="true"/>
+        </commentGenerator>
+
+        <jdbcConnection driverClass="com.mysql.cj.jdbc.Driver"
+                        connectionURL="jdbc:mysql://localhost:3306/mall?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=Asia/Shanghai&amp;useSSL=false&amp;allowPublicKeyRetrieval=true"
+                        userId="root"
+                        password="123456">
+            <property name="nullCatalogMeansCurrent" value="true"/>
+        </jdbcConnection>
+
+        <javaTypeResolver>
+            <property name="forceBigDecimals" value="false"/>
+        </javaTypeResolver>
+
+        <javaModelGenerator targetPackage="com.mymall.product.model" targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+            <property name="trimStrings" value="false"/>
+        </javaModelGenerator>
+
+        <sqlMapGenerator targetPackage="dao" targetProject="src/main/resources">
+            <property name="enableSubPackages" value="false"/>
+        </sqlMapGenerator>
+
+        <javaClientGenerator type="XMLMAPPER" targetPackage="com.mymall.product.dao"
+                             targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+        </javaClientGenerator>
+
+        <!-- ========== 商品主体（8）========== -->
+        <table tableName="pms_product" domainObjectName="PmsProduct">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_sku_stock" domainObjectName="PmsSkuStock">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_member_price" domainObjectName="PmsMemberPrice">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_ladder" domainObjectName="PmsProductLadder">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_full_reduction" domainObjectName="PmsProductFullReduction">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_attribute_value" domainObjectName="PmsProductAttributeValue">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_vertify_record" domainObjectName="PmsProductVertifyRecord">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_operate_log" domainObjectName="PmsProductOperateLog">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+
+        <!-- ========== 分类与属性（5）========== -->
+        <table tableName="pms_product_category" domainObjectName="PmsProductCategory">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_category_attribute_relation" domainObjectName="PmsProductCategoryAttributeRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_attribute" domainObjectName="PmsProductAttribute">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_product_attribute_category" domainObjectName="PmsProductAttributeCategory">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="pms_brand" domainObjectName="PmsBrand">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+
+        <!-- ========== 内容/优选（4）========== -->
+        <table tableName="cms_subject" domainObjectName="CmsSubject">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="cms_prefrence_area" domainObjectName="CmsPrefrenceArea">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="cms_subject_product_relation" domainObjectName="CmsSubjectProductRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+        <table tableName="cms_prefrence_area_product_relation" domainObjectName="CmsPrefrenceAreaProductRelation">
+            <generatedKey column="id" sqlStatement="MySql" identity="true"/>
+        </table>
+    </context>
+</generatorConfiguration>

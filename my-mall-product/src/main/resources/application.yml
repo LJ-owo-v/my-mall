@@ -1,0 +1,42 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: my-mall-product
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 10
+      max-active: 20
+
+# MyBatis：XML 全部放 resources/dao（与 MBG 的 sqlMapGenerator 一致）
+mybatis:
+  mapper-locations:
+    - classpath:dao/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+pagehelper:
+  helper-dialect: mysql
+  support-methods-arguments: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# traceId 落到日志（与 common-web 的 TraceIdFilter 配合）
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+  level:
+    com.mymall.product: debug
