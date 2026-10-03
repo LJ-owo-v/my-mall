@@ -65,7 +65,10 @@ AI: <AI 生成/改动的范围，如 Controller/Service/DAO/XML 骨架（照抄 
 | my-mall-gateway | 8201 | 全部入口 `/mall-*` | `docs/ai/20-gateway.md` |
 | my-mall-auth | 8401 | `/mall-auth/**` | `docs/ai/30-auth.md` |
 | my-mall-user | 8086 | `/mall-admin/{admin,role,menu,resource,resourceCategory,memberLevel}/**` | `docs/ai/40-user.md` |
-| my-mall-product（D6 待建） | 8087 | `/mall-admin/{product,brand,productCategory,productAttribute,sku,subject,prefrenceArea}/**` | `docs/ai/50-product.md` |
+| my-mall-product（D6） | 8087 | `/mall-admin/{product,brand,productCategory,productAttribute,sku,subject,prefrenceArea}/**` | `docs/ai/50-product.md` |
+| my-mall-marketing | 8088 | `/mall-admin/{home/*,coupon,couponHistory,flash,flashSession,flashProductRelation}/**` | `docs/ai/60-marketing.md` |
+| my-mall-order | 8089 | `/mall-admin/{order,returnApply,returnReason,orderSetting,companyAddress}/**` | `docs/ai/61-order.md` |
+| my-mall-file | 8090 | `/mall-admin/aliyun/oss/**`（仅 OSS，无 MinIO） | `docs/ai/62-file.md` |
 | 新服务（D7 起） | — | — | `docs/ai/90-new-module.md` |
 | 原服务（对照基线） | 8080 / 8085 / 8081 | mall-admin / mall-portal / mall-search | 仅作对比参照，不修改 |
 

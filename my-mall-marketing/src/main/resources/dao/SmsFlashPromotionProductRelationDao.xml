@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- ★ 迁移期只读跨域：本文件 SELECT 了 pms_product（不写、不 import 对方模块的类）
+     将来演进方向：Feign 调 my-mall-product + 缓存，或商品变更事件驱动的本地快照表 -->
+<mapper namespace="com.mymall.marketing.dao.SmsFlashPromotionProductRelationDao">
+
+    <!-- extends 指向本模块 MBG 生成的 BaseResultMap（跨文件引用合法，同一个 Configuration） -->
+    <resultMap id="flashProductMap" type="com.mymall.marketing.domain.SmsFlashPromotionProduct"
+               extends="com.mymall.marketing.dao.SmsFlashPromotionProductRelationMapper.BaseResultMap">
+        <!-- ★ A2 的关键改动：原来 resultMap="...PmsProductMapper.BaseResultMap"（跨域 + 带 30 个 null 键）
+             改成 javaType + 显式 5 列映射 -->
+        <association property="product" javaType="com.mymall.marketing.domain.MarketingProductView" columnPrefix="p_">
+            <id     column="id"         property="id"/>
+            <result column="name"       property="name"/>
+            <result column="product_sn" property="productSn"/>
+            <result column="price"      property="price"/>
+            <result column="stock"      property="stock"/>
+        </association>
+    </resultMap>
+
+    <select id="getList" resultMap="flashProductMap">
+        SELECT
+            r.id, r.flash_promotion_price, r.flash_promotion_count, r.flash_promotion_limit,
+            r.flash_promotion_id, r.flash_promotion_session_id, r.product_id, r.sort,
+            p.id p_id, p.`name` p_name, p.product_sn p_product_sn, p.price p_price, p.stock p_stock
+        FROM sms_flash_promotion_product_relation r
+                 LEFT JOIN pms_product p ON r.product_id = p.id
+        WHERE r.flash_promotion_id = #{flashPromotionId}
+          AND r.flash_promotion_session_id = #{flashPromotionSessionId}
+        ORDER BY r.sort DESC
+    </select>
+
+    <!-- Dao.xml -->
+    <select id="countBySessionId" resultType="map">
+        SELECT flash_promotion_session_id AS sessionId, COUNT(*) AS productCount
+        FROM sms_flash_promotion_product_relation
+        WHERE flash_promotion_id = #{flashPromotionId}
+        GROUP BY flash_promotion_session_id
+    </select>
+
+    <!-- SmsFlashPromotionProductRelationDao.xml -->
+    <insert id="insertList">
+        INSERT INTO sms_flash_promotion_product_relation
+        (flash_promotion_id, flash_promotion_session_id, product_id, flash_promotion_price, flash_promotion_count, flash_promotion_limit, sort)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.flashPromotionId},
+            #{item.flashPromotionSessionId},
+            #{item.productId},
+            #{item.flashPromotionPrice},
+            #{item.flashPromotionCount},
+            #{item.flashPromotionLimit},
+            #{item.sort})
+        </foreach>
+    </insert>
+
+
+</mapper>
