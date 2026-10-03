@@ -1,0 +1,43 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: my-mall-file
+  profiles:
+    active: dev
+  # ★ 本模块没有数据源（上传域不碰数据库）
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# ============ 阿里云 OSS 直传配置 ============
+# 🔴 密钥绝不写进本文件（本仓库是公开仓库）：用环境变量注入，Spring 宽松绑定会自动识别
+#    $env:ALIYUN_OSS_ACCESSKEYID / $env:ALIYUN_OSS_ACCESSKEYSECRET / $env:ALIYUN_OSS_BUCKETNAME
+aliyun:
+  oss:
+    endpoint: oss-cn-shenzhen.aliyuncs.com
+    accessKeyId: ${ALIYUN_OSS_ACCESSKEYID:REPLACE_ME_accessKeyId}
+    accessKeySecret: ${ALIYUN_OSS_ACCESSKEYSECRET:REPLACE_ME_accessKeySecret}
+    bucketName: ${ALIYUN_OSS_BUCKETNAME:REPLACE_ME_bucket}
+    maxSize: 10                                 # 单文件大小上限（MB）
+    # ★ key 必须是 aliyun.oss.dir.prefix：OssServiceImpl 读的是这个（不是 policy.dir.prefix），
+    #   写错会导致启动时占位符解析失败（Could not resolve placeholder 'aliyun.oss.dir.prefix'）
+    dir:
+      prefix: Mall-dev/images/
+    policy:
+      expire: 300                               # 签名有效期（秒）
+    callback: http://127.0.0.1:8090/aliyun/oss/callback   # 直连服务端口；走网关则为 http://<网关>:8201/mall-admin/aliyun/oss/callback
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+  level:
+    com.mymall.file: debug
