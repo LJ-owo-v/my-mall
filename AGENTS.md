@@ -69,6 +69,7 @@ AI: <AI 生成/改动的范围，如 Controller/Service/DAO/XML 骨架（照抄 
 | my-mall-marketing | 8088 | `/mall-admin/{home/*,coupon,couponHistory,flash,flashSession,flashProductRelation}/**` | `docs/ai/60-marketing.md` |
 | my-mall-order | 8089 | `/mall-admin/{order,returnApply,returnReason,orderSetting,companyAddress}/**` | `docs/ai/61-order.md` |
 | my-mall-file | 8090 | `/mall-admin/aliyun/oss/**`（仅 OSS，无 MinIO） | `docs/ai/62-file.md` |
+| my-mall-search | 8091 | `/mall-search/**`（Elasticsearch 索引 `pms`） | `docs/ai/63-search.md` |
 | 新服务（D7 起） | — | — | `docs/ai/90-new-module.md` |
 | 原服务（对照基线） | 8080 / 8085 / 8081 | mall-admin / mall-portal / mall-search | 仅作对比参照，不修改 |
 

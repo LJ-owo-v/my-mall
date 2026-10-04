@@ -1,0 +1,54 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: my-mall-search
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 10
+      max-active: 20
+
+  # ★ Elasticsearch：Spring Boot 3.x 的键是 spring.elasticsearch.uris（不是 2.x 的 spring.data.elasticsearch.cluster-nodes）
+  elasticsearch:
+    uris: http://localhost:9200
+    connection-timeout: 5s
+    socket-timeout: 30s
+    # 若 ES 8.x 开启了安全认证（本机 9200 根信息解析为空，疑似 401），取消下面两行注释并填真实账号
+    # 建议密码用环境变量注入，别提交到公开仓库
+    #username: elastic
+    #password: ${ELASTIC_PASSWORD:REPLACE_ME}
+  data:
+    elasticsearch:
+      repositories:
+        enabled: true
+
+mybatis:
+  mapper-locations:
+    - classpath:dao/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+pagehelper:
+  helper-dialect: mysql
+  support-methods-arguments: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+  level:
+    com.mymall.search: debug

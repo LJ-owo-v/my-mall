@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mymall</groupId>
+        <artifactId>my-mall</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>my-mall-search</artifactId>
+    <name>my-mall-search</name>
+    <description>搜索域服务（8091）：接管网关 /mall-search/**（EsProductController 8 端点，Elasticsearch 索引 pms）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mymall</groupId>
+            <artifactId>my-mall-common-web</artifactId>
+            <exclusions>
+                <!-- ★ 本模块不用 Redis：common-web 会传递引入 common-redis，
+                     其中 RedisServiceImpl 带 @Service 会被扫描强制实例化 → 缺 RedisTemplate 启动崩（D6/D7 实测） -->
+                <exclusion>
+                    <groupId>com.mymall</groupId>
+                    <artifactId>my-mall-common-redis</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- ★ 本模块新增的中间件：Elasticsearch（版本由 Spring Boot BOM 管理，不要自己写版本号）
+             注意：Spring Boot 3.5 自带 Spring Data Elasticsearch 5.5.x，面向 ES 8.x；
+             原项目的 ES 7.17 不能照抄，请用 ES 8.x + 对应版本 IK 分词器 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
+
+        <!-- 读 pms_* 组装索引文档（importAll / create） -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.pagehelper</groupId>
+            <artifactId>pagehelper-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions><execution><goals><goal>repackage</goal></goals></execution></executions>
+            </plugin>
+            <!-- 本模块不需要 MBG：搜索域不新增表，只读现有 pms_* -->
+        </plugins>
+    </build>
+</project>
