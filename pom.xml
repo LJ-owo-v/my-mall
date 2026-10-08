@@ -27,6 +27,7 @@
         <module>my-mall-product</module>
         <module>my-mall-file</module>
         <module>my-mall-search</module>
+        <module>my-mall-portal</module>
         <module>my-mall-order</module>
         <module>my-mall-marketing</module>
     </modules>

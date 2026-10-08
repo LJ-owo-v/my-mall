@@ -1,0 +1,54 @@
+package com.mymall.portal.service.impl;
+
+import com.mymall.common.redis.RedisService;
+import com.mymall.portal.model.UmsMember;
+import com.mymall.portal.service.UmsMemberCacheService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UmsMemberCacheServiceImpl implements UmsMemberCacheService {
+    @Autowired
+    private RedisService redisService;
+    @Value("${redis.database}")
+    private String REDIS_DATABASE;
+    @Value("${redis.expire.common}")
+    private Long REDIS_EXPIRE;
+    @Value("${redis.expire.authCode}")
+    private Long REDIS_EXPIRE_AUTH_CODE;
+    @Value("${redis.key.member}")
+    private String REDIS_KEY_MEMBER;
+    @Value("${redis.key.authCode}")
+    private String REDIS_KEY_AUTH_CODE;
+
+
+    @Override
+    public void delMember(Long memberId) {
+        String key = REDIS_DATABASE + ":" + REDIS_KEY_MEMBER + ":" + memberId;
+        redisService.del(key);
+    }
+
+    @Override
+    public UmsMember getMember(Long memberId) {
+        return null;
+    }
+
+    @Override
+    public void setMember(UmsMember member) {
+
+    }
+
+    @Override
+    public void setAuthCode(String telephone, String authCode) {
+        String key = REDIS_DATABASE + ":" + REDIS_KEY_AUTH_CODE + ":" + telephone;
+        redisService.set(key, authCode, REDIS_EXPIRE_AUTH_CODE);
+
+    }
+
+    @Override
+    public String getAuthCode(String telephone) {
+        String key = REDIS_DATABASE + ":" + REDIS_KEY_AUTH_CODE + ":" + telephone;
+        return (String) redisService.get(key);
+    }
+}

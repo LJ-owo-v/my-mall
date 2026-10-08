@@ -1,0 +1,87 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: my-mall-portal
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+
+  # ★ 门户域需要 Redis（登录态 + 缓存）；database=0（Sa-Token session 与网关/认证服务一致）
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: root123
+      database: 0
+      timeout: 3000ms
+    # ★ 浏览记录/商品收藏：MongoDB
+    mongodb:
+      uri: mongodb://localhost:27017/mall-portal
+
+  # ★ 超时未支付自动取消：RabbitMQ（本机默认 guest/guest；原项目 docker 是 rabbitmq:3.9.11-management）
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: mall
+    password: mall
+    # ★ 本机 RabbitMQ 的 vhost 是 /mall（不是默认 /），不写会 401/ACCESS_REFUSED
+    virtual-host: /mall
+# Sa-Token：必须与网关/认证/其它服务逐项一致（token-name 决定 Redis key 前缀）
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  is-read-header: true
+  is-read-cookie: false
+  timeout: 604800
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
+  is-print: false
+  jwt-secret-key: sa-secret-key123
+
+mybatis:
+  mapper-locations:
+    - classpath:dao/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+pagehelper:
+  helper-dialect: mysql
+  support-methods-arguments: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  # 若本机没起 MongoDB/RabbitMQ，健康检查会 DOWN → 本地开发可先关掉对应指标
+  health:
+    mongodb:
+      enabled: true
+    rabbit:
+      enabled: true
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+  level:
+    com.mymall.portal: debug
+
+redis:
+  database: mall-swarm
+  key:
+    authCode: 'ums:authCode'
+    orderId: 'oms:orderId'
+    member: 'ums:member'
+  expire:
+    authCode: 90 # 验证码超期时间
+    common: 86400 # 24小时

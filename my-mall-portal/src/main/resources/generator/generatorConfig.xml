@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE generatorConfiguration
+        PUBLIC "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+        "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+<!-- 门户域只生成"自己拥有"的表：购物车 + 会员
+     必须在模块目录内执行： cd my-mall-portal  →  mvn mybatis-generator:generate -->
+<generatorConfiguration>
+    <context id="MySqlContext" targetRuntime="MyBatis3" defaultModelType="flat">
+        <property name="beginningDelimiter" value="`"/>
+        <property name="endingDelimiter" value="`"/>
+        <property name="javaFileEncoding" value="UTF-8"/>
+
+        <plugin type="org.mybatis.generator.plugins.SerializablePlugin"/>
+        <plugin type="org.mybatis.generator.plugins.ToStringPlugin"/>
+        <plugin type="org.mybatis.generator.plugins.UnmergeableXmlMappersPlugin"/>
+
+        <commentGenerator>
+            <property name="suppressAllComments" value="false"/>
+            <property name="suppressDate" value="true"/>
+            <property name="addRemarkComments" value="true"/>
+        </commentGenerator>
+
+        <jdbcConnection driverClass="com.mysql.cj.jdbc.Driver"
+                        connectionURL="jdbc:mysql://localhost:3306/mall?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=Asia/Shanghai&amp;useSSL=false&amp;allowPublicKeyRetrieval=true"
+                        userId="root" password="123456">
+            <property name="nullCatalogMeansCurrent" value="true"/>
+        </jdbcConnection>
+
+        <javaTypeResolver>
+            <property name="forceBigDecimals" value="false"/>
+        </javaTypeResolver>
+
+        <javaModelGenerator targetPackage="com.mymall.portal.model" targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+            <!-- ★ 必须 false：true 会生成 trim 的 setter，静默吃掉库里尾空格（D6 实测） -->
+            <property name="trimStrings" value="false"/>
+        </javaModelGenerator>
+        <sqlMapGenerator targetPackage="dao" targetProject="src/main/resources">
+            <property name="enableSubPackages" value="false"/>
+        </sqlMapGenerator>
+        <javaClientGenerator type="XMLMAPPER" targetPackage="com.mymall.portal.dao" targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+        </javaClientGenerator>
+
+        <table tableName="oms_cart_item" domainObjectName="OmsCartItem"><generatedKey column="id" sqlStatement="MySql" identity="true"/></table>
+        <table tableName="ums_member" domainObjectName="UmsMember"><generatedKey column="id" sqlStatement="MySql" identity="true"/></table>
+        <table tableName="ums_member_level" domainObjectName="UmsMemberLevel"><generatedKey column="id" sqlStatement="MySql" identity="true"/></table>
+        <table tableName="ums_member_receive_address" domainObjectName="UmsMemberReceiveAddress"><generatedKey column="id" sqlStatement="MySql" identity="true"/></table>
+    </context>
+    <!-- 跨域只读表：PO 生成到本模块 model，只在 my-mall-portal 内使用、只读、不外泄；域改表后需重跑 MBG -->
+    <context id="ReadOnlyCrossDomain" targetRuntime="MyBatis3" defaultModelType="flat">
+        <commentGenerator>
+            <property name="suppressAllComments" value="true"/>
+            <property name="suppressDate" value="true"/>
+        </commentGenerator>
+        <jdbcConnection driverClass="com.mysql.cj.jdbc.Driver"
+                        connectionURL="jdbc:mysql://localhost:3306/mall?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=Asia/Shanghai&amp;useSSL=false&amp;allowPublicKeyRetrieval=true"
+                        userId="root" password="123456">
+            <property name="nullCatalogMeansCurrent" value="true"/>
+        </jdbcConnection>
+        <javaTypeResolver><property name="forceBigDecimals" value="false"/></javaTypeResolver>
+        <javaModelGenerator targetPackage="com.mymall.portal.model" targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+            <property name="trimStrings" value="false"/>
+        </javaModelGenerator>
+        <sqlMapGenerator targetPackage="dao" targetProject="src/main/resources">
+            <property name="enableSubPackages" value="false"/>
+        </sqlMapGenerator>
+        <javaClientGenerator type="XMLMAPPER" targetPackage="com.mymall.portal.dao" targetProject="src/main/java">
+            <property name="enableSubPackages" value="false"/>
+        </javaClientGenerator>
+        <table tableName="cms_subject"/>
+        <table tableName="oms_order"/>
+        <table tableName="oms_order_item"/>
+        <table tableName="oms_order_return_apply"/>
+        <table tableName="pms_brand"/>
+        <table tableName="pms_product"/>
+        <table tableName="pms_product_attribute"/>
+        <table tableName="pms_product_category"/>
+        <table tableName="pms_product_full_reduction"/>
+        <table tableName="pms_product_ladder"/>
+        <table tableName="pms_sku_stock"/>
+        <table tableName="sms_coupon"/>
+        <table tableName="sms_coupon_history"/>
+        <table tableName="sms_coupon_product_category_relation"/>
+        <table tableName="sms_coupon_product_relation"/>
+        <table tableName="sms_home_advertise"/>
+        <table tableName="ums_integration_consume_setting"/>
+    </context>
+</generatorConfiguration>
