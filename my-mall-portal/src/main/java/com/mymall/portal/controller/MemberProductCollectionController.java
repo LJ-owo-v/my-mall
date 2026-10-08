@@ -15,9 +15,9 @@ import org.springframework.web.bind.annotation.*;
  * 会员收藏管理Controller
  */
 @Controller
-@Tag(name = "MemberCollectionController", description = "会员收藏管理")
+@Tag(name = "MemberProductCollectionController", description = "会员收藏管理")
 @RequestMapping("/member/productCollection")
-public class MemberCollectionController {
+public class MemberProductCollectionController {
     @Autowired
     private MemberCollectionService memberCollectionService;
 

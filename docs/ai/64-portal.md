@@ -37,6 +37,53 @@
 ## 行为说明（刻意与老服务保持一致）
 - **未登录直连返回 HTTP 500**（`NotLoginException` 无人接管，Spring 兜底）—— 老服务 8085 完全相同；经网关访问时由网关拦成 `{"code":401,...}`。**不要**加 `@RestControllerAdvice` 改成 401，否则与老服务不一致。
 
+## ★★ D9 实测结论 4 条（踩过的坑，逐条有实测依据）
+
+### 1. 分页回显必须是 **0 基**
+老服务（8085）的 `CommonPage.pageNum` 回显的是 **PageHelper 的 `page.getNumber()`（0 基）**，不是人们直觉里的 1 基。
+- 写法：`CommonPage.of(page.getNumber(), page.getSize(), page.getTotalElements(), page.getContent())`
+- **禁止** `new PageInfo<>(page)` 再包 `CommonPage`：`PageInfo.getPageNum()` 是 **1 基**，会让第一页回显 `pageNum=1` 而老服务是 `0` → 逐字节不一致。
+- 实测：`/cart/list`、`/member/coupon/listHistory` 等分页端点，8092 与 8085 的 `pageNum/pageSize/total/page` 四字段逐字节一致。
+
+### 2. 门户**必须**有 `config/JacksonConfig`（`Include.NON_NULL`）
+缺了它，值为 `null` 的字段会照常输出 `"field":null`，而老服务统一省略 → 响应体字节不一致（这是 D9 只读对比 9/9 的前提之一）。
+- 位置：`config/JacksonConfig`，`Jackson2ObjectMapperBuilder.serializationInclusion(JsonInclude.Include.NON_NULL)`
+- 只读端点做逐字节对比时，**任何非空字段差异都会被它放大**，所以这个配置不是"可选优化"，是契约的一部分。
+
+### 3. `/sso/info` 返回 `password` 哈希 —— **已确认的安全问题**（照抄保留）
+`/sso/info` 的返回体里带 `ums_member.password`（BCrypt 哈希，形如 `$2a$10$...`）。
+- 老服务 8085 就是这个行为，**迁移期保持一致、不做"顺手修"**（改了就逐字节不一致）。
+- 已登记为安全问题：将来要修必须**两边同时改成过滤 password**，并配套改前端与验收脚本；本批不做。
+
+### 4. 并存版本**不能共享同一会员 session**（本轮实测，最重要）
+`StpMemberUtil` 的 `TYPE="memberLogin"` + `sa-token.token-name=Authorization` 决定 Redis 键：
+**`Authorization:memberLogin:session:{loginId}`**。8085 与 8092 共用 db0、同一 token-name、同一 loginType → **共用同一个 session 键**；而 session 的 `dataMap.memberInfo` 是 Jackson default-typing **按 FQCN 写死**的：
+
+```
+InvalidTypeIdException: Could not resolve type id 'com.mymall.common.dto.UserDto'
+  → SaSession["dataMap"] → ConcurrentHashMap → sa-token SaJsonTemplateForJackson.jsonToObject
+```
+
+**实测结果（双向都崩）**：
+
+| 操作 | 结果 |
+|---|---|
+| 清空 `Authorization:memberLogin:*` → 8085 登录（写 `com.macro.mall.common.dto.UserDto`） | ✅ 200；同 token 直连 8085 ✅、经网关 ✅ |
+| 同一个 token 打 8092 | ❌ HTTP 500 |
+| 8092 先登录（写 `com.mymall.common.dto.UserDto`）后再打 8085 | ❌ HTTP 500 |
+
+**硬约束（AGENTS.md 第 12 条）**：Strangler Fig 并存期内，`UserDto` 的**包名必须与老服务逐字一致** = `com.macro.mall.common.dto.UserDto`，**不许"去 macro 化"**。一旦改动，两个服务会互相让对方 500。
+
+**改名后的清理清单（两个前缀都要清）**：
+```powershell
+# Redis db0；只清 mall 相关前缀，别动同库的 sys_dict:*/sys_config:*
+redis-cli -a root123 -n 0 --scan --pattern 'Authorization:memberLogin:*'   # Sa-Token 会员 session + token
+redis-cli -a root123 -n 0 --scan --pattern 'mall-swarm:ums:member*'        # UmsMemberCacheServiceImpl 的会员缓存（同为 FQCN 载荷）
+```
+只清其中一个是**不够的**：会员缓存里同样内嵌类名（`com.macro.mall.model.UmsMember`），跨服务复用会触发同一个 `InvalidTypeIdException`。
+
+## 验收（D9）
+
 ## ⚠️ 迁移注意事项
 **给类改包名/改名（如 `UserDto` 去 macro 化）会让 Redis 里已有的 Sa-Token session 反序列化失败**：
 `InvalidTypeIdException: Could not resolve type id 'com.macro.mall.common.dto.UserDto'` → 所有需登录接口 500。
