@@ -112,7 +112,7 @@ public class UmsMemberCouponServiceImpl implements UmsMemberCouponService {
         Date now = new Date();
 
         // ① 查出该用户所有优惠券（含优惠券详情、关联的分类/商品）
-        List<SmsCouponHistoryDetail> allList = couponHistoryDao.getDetailList(currentMember.getId());
+        List<SmsCouponHistoryDetail> allList = couponHistoryDao.getDetailList(currentMember.getId(), null);
 
         // ② 遍历每张优惠券，判断是否可用
         List<SmsCouponHistoryDetail> enableList = new ArrayList<>();   // 可用

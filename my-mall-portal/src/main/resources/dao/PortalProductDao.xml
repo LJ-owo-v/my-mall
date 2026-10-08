@@ -3,18 +3,18 @@
 <mapper namespace="com.mymall.portal.dao.PortalProductDao">
     <resultMap id="cartProductMap" type="com.mymall.portal.domain.CartProduct" autoMapping="true">
         <id column="id" jdbcType="BIGINT" property="id" />
-        <collection property="productAttributeList" columnPrefix="attr_" resultMap="com.mymall.mapper.PmsProductAttributeMapper.BaseResultMap">
+        <collection property="productAttributeList" columnPrefix="attr_" resultMap="com.mymall.portal.dao.PmsProductAttributeMapper.BaseResultMap">
         </collection>
-        <collection property="skuStockList" columnPrefix="sku_" resultMap="com.mymall.mapper.PmsSkuStockMapper.BaseResultMap">
+        <collection property="skuStockList" columnPrefix="sku_" resultMap="com.mymall.portal.dao.PmsSkuStockMapper.BaseResultMap">
         </collection>
     </resultMap>
-    <resultMap id="promotionProductMap" type="com.mymall.portal.domain.PromotionProduct" extends="com.mymall.mapper.PmsProductMapper.BaseResultMap">
+    <resultMap id="promotionProductMap" type="com.mymall.portal.domain.PromotionProduct" extends="com.mymall.portal.dao.PmsProductMapper.BaseResultMap">
         <id column="id" jdbcType="BIGINT" property="id" />
-        <collection property="skuStockList" columnPrefix="sku_" resultMap="com.mymall.mapper.PmsSkuStockMapper.BaseResultMap">
+        <collection property="skuStockList" columnPrefix="sku_" resultMap="com.mymall.portal.dao.PmsSkuStockMapper.BaseResultMap">
         </collection>
-        <collection property="productLadderList" columnPrefix="ladder_" resultMap="com.mymall.mapper.PmsProductLadderMapper.BaseResultMap">
+        <collection property="productLadderList" columnPrefix="ladder_" resultMap="com.mymall.portal.dao.PmsProductLadderMapper.BaseResultMap">
         </collection>
-        <collection property="productFullReductionList" columnPrefix="full_" resultMap="com.mymall.mapper.PmsProductFullReductionMapper.BaseResultMap">
+        <collection property="productFullReductionList" columnPrefix="full_" resultMap="com.mymall.portal.dao.PmsProductFullReductionMapper.BaseResultMap">
         </collection>
     </resultMap>
     <select id="getCartProduct" resultMap="cartProductMap">
@@ -72,7 +72,7 @@
             #{id}
         </foreach>
     </select>
-    <select id="getAvailableCouponList" resultMap="com.mymall.mapper.SmsCouponMapper.BaseResultMap">
+    <select id="getAvailableCouponList" resultMap="com.mymall.portal.dao.SmsCouponMapper.BaseResultMap">
         SELECT *
         FROM sms_coupon
         WHERE use_type = 0

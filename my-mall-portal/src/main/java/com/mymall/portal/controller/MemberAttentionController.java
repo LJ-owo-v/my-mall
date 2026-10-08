@@ -49,7 +49,7 @@ public class MemberAttentionController {
     public CommonResult<CommonPage<MemberBrandAttention>> list(@RequestParam(value = "pageNum", defaultValue = "1") Integer pageNum,
                                                                @RequestParam(value = "pageSize", defaultValue = "5") Integer pageSize) {
         Page<MemberBrandAttention> page = memberAttentionService.list(pageNum,pageSize);
-        return CommonResult.success(CommonPage.of(pageNum, pageSize, page.getTotalElements(), page.getContent()));
+        return CommonResult.success(CommonPage.of(page.getNumber(), pageSize, page.getTotalElements(), page.getContent()));
     }
 
     @Operation(summary = "显示关注品牌详情")

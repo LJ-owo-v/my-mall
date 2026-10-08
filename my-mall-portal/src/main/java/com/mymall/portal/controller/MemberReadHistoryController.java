@@ -63,7 +63,7 @@ public class MemberReadHistoryController {
     public CommonResult<CommonPage<MemberReadHistory>> list(@RequestParam(value = "pageNum", defaultValue = "1") Integer pageNum,
                                                             @RequestParam(value = "pageSize", defaultValue = "5") Integer pageSize) {
         Page<MemberReadHistory> page = memberReadHistoryService.list(pageNum, pageSize);
-        return CommonResult.success(CommonPage.of(pageNum, pageSize, page.getTotalElements(), page.getContent()));
+        return CommonResult.success(CommonPage.of(page.getNumber(), pageSize, page.getTotalElements(), page.getContent()));
     }
 
 }

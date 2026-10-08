@@ -1,5 +1,7 @@
 package com.mymall.portal.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.io.Serializable;
 import java.util.Date;
 
@@ -472,6 +474,7 @@ public class UmsMember implements Serializable {
      *
      * @mbg.generated
      */
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'+00:00'", timezone = "GMT")
     public Date getBirthday() {
         return birthday;
     }
