@@ -93,6 +93,30 @@ redis-cli -a root123 -n 0 --scan --pattern 'mall-swarm:ums:member*'        # Ums
 1. **领券 `POST /member/coupon/add/{couponId}` 是跨域写**（写营销域 `sms_coupon_history`）→ 将来改 Feign 调 `my-mall-marketing`
 2. `PortalProductDao`/`SmsCouponHistoryDao` 读 `pms_*`/`sms_*` → 将来改 Feign 或本地快照
 3. 首页聚合（D11）适合 Feign + 缓存 + 降级
+4. **★ 超卖修复（D10a 遗留，代码已留 TODO）**：`OmsPortalOrderServiceImpl.lockStock` 仍是
+   `selectByPrimaryKey` → 应用层 `+quantity` → `updateByPrimaryKeySelective` 的**无守卫读-改-写**：
+   并发丢失更新 + 旧快照覆盖 `stock`/`sale` 列；且 `hasStock()` 与 `lockStock` 是两条独立查询（TOCTOU）。
+   目标改法：`UPDATE pms_sku_stock SET lock_stock = lock_stock + #{quantity} WHERE id = #{skuId} AND stock - lock_stock >= #{quantity}`，
+   影响行数=0 → `Asserts.fail("库存不足，无法下单")`（文案与老服务一致）；同 sku 合并累加；失败靠事务回滚。
+   详见 `docs/后期优化文档.md` #9 与 `D10a-任务书.md` §6 B3
+5. 跨域直写 5 张外部域表（`oms_order`/`oms_order_item`/`pms_sku_stock`/`sms_coupon_history`/`ums_member`）→ 将来 Feign 或 Outbox + 对账
+
+## D10a 实测（门户下单域）
+
+- **`PortalOrderDao.xml` 的 `resultMap extends` / `<collection resultMap>` 必须指向门户自己的**
+  `com.mymall.portal.dao.OmsOrderMapper.BaseResultMap` / `OmsOrderItemMapper.BaseResultMap`；
+  曾误写成 `com.mymall.order.mapper.*`（8089 模块的包，门户 classpath 里没有）→ 启动崩
+  `Result Maps collection does not contain value`。
+- **空分页结果不能输出 `list`**：老服务 8085 空列表返回 `{pageNum,pageSize,totalPage,total}`（87B）；
+  `CommonPage.of()` 的 `list == null ? Collections.emptyList()` 兜底会让 8092 多出 `"list":[]`（97B）→ 不一致。
+  已在 `CommonPage.list` 上加 `@JsonInclude(NON_EMPTY)`（`common-core` 补 `jackson-annotations` 编译期依赖）。
+- **MBG 两个坑**：① `ReadOnlyCrossDomain` context 缺 `UnmergeableXmlMappersPlugin` 时，MBG 会把 `BaseResultMap`
+  **追加**到既有 XML 末尾（重复定义，启动崩）→ 已补插件；② MBG `overwrite=true` 会重写 `model/`，
+  实测削掉了 `UmsMember.java` 上 D9 加的 `@JsonFormat` → **每次跑完 MBG 都要 `git status` 检查 `model/` 并还原**。
+- **改了 `resources` 必须重新 `package`**：`target/classes` 会缓存旧资源（建议先删 `target/classes/dao`），
+  否则会出现"修了还在报同样的错"。
+- 下单 A/B 实测：响应均 `code=200 下单成功`；订单主表逐字段一致、明细一致、锁库存 `lock=2/1` 一致。
+  老项目促销缺陷（`pay_amount` 为负、`realAmount` 为负、赠品积分偏大）两服务一致 → **照抄保留**（见 #3/#4）。
 
 ## 验收（D9）
 - 只读端点：8085 vs 8092 逐字节对比（**各自用自己的 token**，因为跨服务借 token 会带旧类名 session）
