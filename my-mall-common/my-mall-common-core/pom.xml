@@ -10,11 +10,17 @@
     </parent>
     <artifactId>my-mall-common-core</artifactId>
     <name>my-mall-common-core</name>
-    <description>零外部依赖的契约层：统一响应、错误码、业务异常</description>
+    <description>契约层：统一响应、错误码、业务异常（仅编译期依赖 Jackson 注解，用于 CommonPage 的序列化对齐）</description>
     <dependencies>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <!-- 仅为 CommonPage.list 的 @JsonInclude(NON_EMPTY) 提供编译期注解（版本由 Spring Boot 管理）；
+             实际 Jackson databind 由各服务的 common-web / spring-boot-starter-web 提供 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
     </dependencies>
 </project>

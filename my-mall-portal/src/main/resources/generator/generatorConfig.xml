@@ -49,6 +49,7 @@
     </context>
     <!-- 跨域只读表：PO 生成到本模块 model，只在 my-mall-portal 内使用、只读、不外泄；域改表后需重跑 MBG -->
     <context id="ReadOnlyCrossDomain" targetRuntime="MyBatis3" defaultModelType="flat">
+        <plugin type="org.mybatis.generator.plugins.UnmergeableXmlMappersPlugin"/>
         <commentGenerator>
             <property name="suppressAllComments" value="true"/>
             <property name="suppressDate" value="true"/>
@@ -86,5 +87,7 @@
         <table tableName="sms_coupon_product_relation"/>
         <table tableName="sms_home_advertise"/>
         <table tableName="ums_integration_consume_setting"/>
+        <!-- D10a 新增：门户下单需要读 orderSetting（normalOrderOvertime/confirmOvertime） -->
+        <table tableName="oms_order_setting"/>
     </context>
 </generatorConfiguration>

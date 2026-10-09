@@ -303,4 +303,14 @@
       order_sn = #{orderSn,jdbcType=VARCHAR}
     where id = #{id,jdbcType=BIGINT}
   </update>
+  <!-- 返还优惠券：状态改回未使用，使用时间置空 -->
+  <update id="releaseCoupon">
+    UPDATE sms_coupon_history
+    SET use_status = 0,
+        use_time = NULL
+    WHERE coupon_id = #{couponId}
+      AND member_id = #{memberId}
+      AND use_status = 1
+  </update>
+
 </mapper>

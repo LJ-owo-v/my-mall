@@ -15,4 +15,8 @@ public interface UmsMemberService {
     String generateAuthCode(String telephone);
 
     void updatePassword(String telephone, String password, String authCode);
+
+    void updateIntegration(Long id, Integer integration);
+
+    UmsMember getById(Long memberId);
 }

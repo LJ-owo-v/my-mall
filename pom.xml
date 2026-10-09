@@ -51,6 +51,9 @@
         <druid.version>1.2.24</druid.version>
         <mysql-connector.version>9.3.0</mysql-connector.version>
         <mybatis-generator.version>1.4.2</mybatis-generator.version>
+
+        <!-- D10b 支付宝沙箱（版本照抄原项目父 pom；jar 已在本地仓库 mvn_repo，离线可编译） -->
+        <alipay-sdk.version>4.40.630.ALL</alipay-sdk.version>
     </properties>
 
     <dependencyManagement>

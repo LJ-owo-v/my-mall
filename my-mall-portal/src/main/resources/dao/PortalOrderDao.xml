@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mymall.portal.dao.PortalOrderDao">
+
+    <!-- 订单详情结果映射：订单 + 订单明细集合（一对多） -->
+    <resultMap id="orderDetailMap" type="com.mymall.portal.domain.OmsOrderDetail"
+               extends="com.mymall.portal.dao.OmsOrderMapper.BaseResultMap">
+        <collection property="orderItemList" columnPrefix="ot_"
+                    resultMap="com.mymall.portal.dao.OmsOrderItemMapper.BaseResultMap">
+        </collection>
+    </resultMap>
+
+    <!-- ① 查询订单详情（订单 + 明细） -->
+    <select id="getDetail" resultMap="orderDetailMap">
+        SELECT
+            o.id, o.order_sn, o.coupon_id, o.integration, o.member_id,
+            ot.id ot_id, ot.product_name ot_product_name,
+            ot.product_sku_id ot_product_sku_id, ot.product_sku_code ot_product_sku_code,
+            ot.product_quantity ot_product_quantity
+        FROM oms_order o
+                 LEFT JOIN oms_order_item ot ON o.id = ot.order_id
+        WHERE o.id = #{orderId}
+    </select>
+
+    <!-- ② 查询超时未支付订单（status=0 且创建时间早于 N 分钟前） -->
+    <select id="getTimeOutOrders" resultMap="orderDetailMap">
+        SELECT
+            o.id, o.order_sn, o.coupon_id, o.integration, o.member_id, o.use_integration,
+            ot.id ot_id, ot.product_name ot_product_name,
+            ot.product_sku_id ot_product_sku_id, ot.product_sku_code ot_product_sku_code,
+            ot.product_quantity ot_product_quantity
+        FROM oms_order o
+                 LEFT JOIN oms_order_item ot ON o.id = ot.order_id
+        WHERE o.status = 0
+          AND o.create_time &lt; date_add(NOW(), INTERVAL -#{minute} MINUTE);
+    </select>
+
+    <!-- ③ 支付成功：stock减（真实扣减），lock_stock减（释放锁定）
+         用 CASE WHEN 一次性更新多个不同SKU -->
+    <update id="updateSkuStock">
+        UPDATE pms_sku_stock
+        SET
+        stock = CASE id
+        <foreach collection="itemList" item="item">
+            WHEN #{item.productSkuId} THEN stock - #{item.productQuantity}
+        </foreach>
+        END,
+        lock_stock = CASE id
+        <foreach collection="itemList" item="item">
+            WHEN #{item.productSkuId} THEN lock_stock - #{item.productQuantity}
+        </foreach>
+        END
+        WHERE id IN
+        <foreach collection="itemList" item="item" separator="," open="(" close=")">
+            #{item.productSkuId}
+        </foreach>
+    </update>
+
+    <!-- ④ 批量更新订单状态 -->
+    <update id="updateOrderStatus">
+        UPDATE oms_order SET status = #{status}
+        WHERE id IN
+        <foreach collection="ids" item="id" separator="," open="(" close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- ⑤ 取消订单：只释放锁定库存 lock_stock减（stock不动，下单时没减过） -->
+    <update id="releaseSkuStockLock">
+        UPDATE pms_sku_stock
+        SET lock_stock = CASE id
+        <foreach collection="itemList" item="item">
+            WHEN #{item.productSkuId} THEN lock_stock - #{item.productQuantity}
+        </foreach>
+        END
+        WHERE id IN
+        <foreach collection="itemList" item="item" separator="," open="(" close=")">
+            #{item.productSkuId}
+        </foreach>
+    </update>
+
+</mapper>

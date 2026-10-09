@@ -182,9 +182,36 @@ public class UmsMemberServiceImpl  implements UmsMemberService {
         memberMapper.updateByPrimaryKeySelective(umsMember);
     }
 
+    /**
+     * 更新会员积分
+     * 下单用积分：扣除积分
+     * 取消订单：返还积分
+     * 支付成功：加赠送积分
+     *
+     * 更新数据库后删除缓存，保证下次查询拿到最新积分
+     *
+     * @param id          会员ID
+     * @param integration 更新后的积分总数
+     */
+    @Override
+    public void updateIntegration(Long id, Integer integration) {
+        // ① 构造只含id和积分的对象
+        UmsMember record = new UmsMember();
+        record.setId(id);
+        record.setIntegration(integration);
+
+        // ② 选择性更新（只更新integration字段，其他字段不动）
+        memberMapper.updateByPrimaryKeySelective(record);
+
+        // ③ 删除会员缓存
+        // 缓存里存的是旧积分，不删的话下次查询会读到过期数据
+        memberCacheService.delMember(id);
+    }
 
 
-    private UmsMember getById(Long id) {
+
+    @Override
+    public UmsMember getById(Long id) {
         return memberMapper.selectByPrimaryKey(id);
     }
 

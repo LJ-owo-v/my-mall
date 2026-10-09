@@ -27,4 +27,9 @@ public interface SmsCouponHistoryMapper {
     int updateByPrimaryKeySelective(SmsCouponHistory row);
 
     int updateByPrimaryKey(SmsCouponHistory row);
+    /**
+     * 返还优惠券：状态改回未使用，清空使用时间
+     */
+    int releaseCoupon(@Param("couponId") Long couponId, @Param("memberId") Long memberId);
+
 }
