@@ -47,6 +47,7 @@ public class AlipayController {
     }
     @Operation(summary = "支付宝异步回调",description = "必须为POST请求，执行成功返回success，执行失败返回failure")
     @RequestMapping(value = "/notify", method = RequestMethod.POST)
+    @ResponseBody
     public String notify(HttpServletRequest request){
         Map<String, String> params = new HashMap<>();
         Map<String, String[]> requestParams = request.getParameterMap();

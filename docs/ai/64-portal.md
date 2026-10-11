@@ -128,8 +128,19 @@ redis-cli -a root123 -n 0 --scan --pattern 'mall-swarm:ums:member*'        # Ums
   - `GET /alipay/query`：`CommonResult<String>`，data = `tradeStatus`；★ 照抄保留原缺陷：异常分支 `response` 为 null 会 **NPE**、`query_options` 传 `String[]`。
 - **`AlipayConfig` 的 3 个默认值不要挪进 yml**：`format="JSON"`、`charset="UTF-8"`、`signType="RSA2"`；
   且 `new DefaultAlipayClient(url, appId, privateKey, format, charset, publicKey, signType)` —— **公钥在第 6 位**，顺序抄错必崩。
-- **沙箱凭证（当前缺口）**：`application.yml` 的 `alipay.appId/appPrivateKey/alipayPublicKey` 目前是占位值。
-  **没有真实凭证 → `pay`/`webPay` 只能验证"端点已注册 + 与 8085 同构失败"，不算功能通过**；密钥不要提交到 git（优先 Nacos）。
+- **沙箱凭证（已配置真实凭证，2026-10-11 实测通过）**：
+  - `app-id=9021000169625364`、应用私钥（PKCS#8 RSA2048，能成功签名）、公钥（X.509 RSA2048）、`gateway-url` 指向沙箱域名；
+  - **实测**：① `GET /alipay/pay` → 200 + `text/html`，返回 1195B 表单（含 `sign`、`out_trade_no`、`product_code=FAST_INSTANT_TRADE_PAY`）；
+    ② `GET /alipay/query` → 沙箱返回**业务错误** `40004 ACQ.TRADE_NOT_EXIST`（不是 `isv.invalid-signature`）→ **沙箱对请求的验签已通过**、appId 绑定正确；
+    ③ **模数比对确认 `alipay-public-key` 不是应用公钥**（两密钥模数不同、互不配对）；
+  - ⚠️ 密钥只放本地 `application.yml`（**不要提交到 git**），生产建议放 Nacos。
+- **★ `/alipay/notify` 必须加 `@ResponseBody`（有意差异，已修）**：
+  原项目 `notify` 方法**没有 `@ResponseBody`**，类上又是 `@Controller` → 返回的 `"failure"`/`"success"` 被 Spring MVC 当成**视图名**解析 → 抛 `NoResourceFoundException` → **HTTP 404**（实测 8085 与 8092 修复前完全一致）。
+  支付宝收到 404 会判**回调失败并反复重试**。修法：只在 `notify` 上加 `@ResponseBody`（**不要**把类改成 `@RestController`——那会波及裸写 HTML 的 `pay`/`webPay`）。
+  修复后实测：空参回调 → `failure` + **HTTP 200**（本地与穿透地址均通过）。
+- **穿透回调地址**：原 TCP 隧道 `tcp://p258ca37.natappfree.cc:6530`（含端口号）在 natapp 服务端侧回源失败、返回 502；
+  改用 **HTTP 隧道**后为 `http://r586bc42.natappfree.cc`（80 端口、无端口号，内网端口 8092），实测 `health`/`query`/`notify` 均正常。
+  ⚠️ 免费版**重启即换域名**，每次都要同步 `notify-url` 并**重启服务**。
 - **退货申请**：`create()` 用 `insert`（非 `insertSelective`）、**无 `@Transactional`**；`OmsOrderReturnApplyParam` 是 `@Getter @Setter`（不是 `@Data`），16 字段。
 - **`/order/paySuccess` 端点映射**：D10a 曾有方法体但缺 `@RequestMapping`，本次补齐（老服务 65 端点里本来就有它）。
 
@@ -152,7 +163,11 @@ redis-cli -a root123 -n 0 --scan --pattern 'mall-swarm:ums:member*'        # Ums
 - **验证证据**：下单 `code=200` 且主键回填（订单 113/114）；超时取消 `status 0→4`、`lock_stock 2/1 → 0/0`；
   **17:00:00 定时任务自然触发**：`getTimeOutOrders Total:0` → INFO `取消订单数量：0`、**无 `Unexpected error`**
   （修复前 16:20/16:30 均报 `BadSqlGrammarException`）。
-- **逻辑溢出**：`getTimeOutOrders` 捞不到时方法在开头 `return 0`；"无明细订单"因此不会进入释放逻辑，有明细的订单仍正常处理。
+- **★ MQ 消费链路已自然验证（2026-10-11 18:26:35）**：日志出现
+  `INFO [] c.m.p.component.CancelOrderReceiver - process orderId:114` —— 该时间是订单 114 的 120 分钟 TTL 到期时刻，
+  即"**TTL 过期 → 死信路由 → 新服务消费者接单 → 调用 cancelOrder(114)**"整链自然跑通
+  （包名 `c.m.p` 证实是新服务 `com.mymall.portal`，而非老服务 `c.m.m.p`）。
+- **定时任务行为**：`getTimeOutOrders` 为空时方法在开头 `return 0`，因此"无明细订单"不会进入释放逻辑；有明细的订单仍被正常处理并释放库存。
 
 ## TODO（D10c 遗留，按决策留后期统一做）
 
