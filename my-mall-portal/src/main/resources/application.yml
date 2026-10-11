@@ -85,3 +85,16 @@ redis:
   expire:
     authCode: 90 # 验证码超期时间
     common: 86400 # 24小时
+
+
+# 支付宝配置
+alipay:
+  gateway-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do # → gatewayUrl
+  app-id: 9021000169625364                                        # → appId
+  app-private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCOgZr8Ixi3tRVFE2wyA/sYWpoJzKmJJpPBmX+z1EiknO+MoMmHuXADS3zzUv/5mfujTaQt7H9Im50hjpIQWGURkLvQyw6Bap2zDYxLRkXz/oSrPT8Yw48fOGQriy7YNmTochPXl+fnQhdd/xDDpJz+091U7j8efln47pBKGxFLaRqVSuNpwO81XB2pwspb4Hu4+UII+X9T61jngfQUqFFdcZFiP1t/QMhlWm92AJLvmckM0t2A0x9NXSYR4HAjb9wYsPraFzOf/oGWOcVuYnFyEL7fO+oaCmg85C//ffz1fZWdWNSbHNYCaqg3C2jjn4dD91KXnBG8W5tQ//ldySJDAgMBAAECggEAGEgvP20/hfX+FNIVaoRRIbo2axsLfEotfRyJrPusERiInN682DqZwoX3WYK4CTDatt3A7u5QVe/mG1SuwMg/GHof9pjS9OxUyLCzShREUSn6My9xc+fGmFxEfULvDXpfQVhG10KUCkyxrJuMoLmI4sb4/MLH0ItZC1ijD22DSeTybcYu7N0ZkmAzbHc973xF6Qxr2VWsKHDd8nRN8vE3ELIephkar5P+/fYr4gFvcu9YaA6Zrgu3x1AKeMIQRMd4fBHtFTiXhKdBXOY6zOX46iv3Xnk7IfOttIb+QAZiEbUdTx2oC6JpFi9vxjSZCDYB+fNlVgOms7FhZtlCeGnzKQKBgQDTOdyOxCCeK+OKsVGtwp+WajDc/nhqlKHOE0CTJxzcjs2GhfvS/OYfWBpoo57JcBC0NhCLl4JB8Jl7rJ0dEKf4HYd26GgeTkDCFvQ+E1OP8rZSyfYSXKsBW3DqzRg/eEyI1Jtn8d1lvFunXaJV/sKl6rVPfNlVtd9vFQqy4lZdJQKBgQCstq4dMOqDh3hlMpBHtAw0qme5P78O4Dq/OkO1K6TbTjZiv6jRyKYGDuWdgHEdARxLwdoB1/Pou3hopvPvibhXcLvFe33etQKi6BHXJ1KDUc35IO2AALTxFsHQvTEgOT0Vw+0yILKqGVftfHE6w7CbwBEJ1cH2J4piSQ5NQKMJRwKBgDIvdjLJcIKEJPzn4mMpcadYNaHcKBoSlFsVAeu0iEvy9ev3W3ymr7pUwXmJHon3wVA/5DB2X/Fwy9axjWbBdVcjFPNwhoRkzUgQEhnJl7oEzcLfz0JPmCWrZymybwdteqmr8fyBX7vzQ8eBHLfX3sFzAX8QR8bwflSzKCaWVjStAoGAJ/Zs+xwiZySlWuUENVMXr+ft8BMr5glEDpMwr27VyliihN7L9R50K9qujm71vTxQi8bi5qJNMYCPL8fRkY9QNAtFp0AXs7w2S/NejWXv1arL+eUAjymatF4LonzkLQyRccPP0lV2gZ0zlyPAH1TAPImIZ7oqEwa7Ilq9EGrwTmkCgYEApfbsDDyVw7Nmcl33ojAxG/nfys2MZT0xit9FEFNhYZV/RENMuVta3dkAPx2+gjLkxra+wFpQaumpctp9S0AF05zoYdtyBWgL6zcDv250+StTroRuwpuwifyfyVhpU+C9GNbo7/SUHZesPVJLUTNJzuaJMffcbWiH7UdqsO6bHY8=          # → appPrivateKey
+  alipay-public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAizSsiyAvR94rYi0CPki4EcoKVtGUrd3wX1GdjYabdIZ/m94O2kqVhOpHgHgRLnWnuXqL6AVUM/MVY4Bugdwt98nA7u+gvPkdHeYRdJFo1ph3yhyV6C9RdrT6ZHsuTLVWMhGybwu5wSBxZm8EamQDfFiTqx/Htm2zY0Fa3dqDBDogMX7RZvKNMcGhrjCSQ9I1i5IAuv5D+hJd2PTXACSlKm93U6SBA/4qVi/dA8JK++Qvb2xZ7WVPeEqbMA4rC1Ut52H68/RN7piITOpJHqxQqc8zGe9TNo2ZTyb61SLZzAqPF4jdDxHb7fDOufrsizPVqtAqr6Iy8cL4a6gABqhTcQIDAQAB                # → alipayPublicKey
+  return-url: http://localhost:8060/#/pages/money/paySuccess
+  notify-url: http://p258ca37.natappfree.cc:6530/alipay/notify #免费的内网穿透每次都会更新
+
+  # format/charset/signType 有默认值，不写也行
+

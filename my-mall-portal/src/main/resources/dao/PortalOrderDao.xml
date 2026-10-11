@@ -32,7 +32,8 @@
         FROM oms_order o
                  LEFT JOIN oms_order_item ot ON o.id = ot.order_id
         WHERE o.status = 0
-          AND o.create_time &lt; date_add(NOW(), INTERVAL -#{minute} MINUTE);
+          AND o.create_time &lt; date_add(NOW(), INTERVAL -#{minute} MINUTE)
+          AND EXISTS (SELECT 1 FROM oms_order_item t2 WHERE t2.order_id = o.id);
     </select>
 
     <!-- ③ 支付成功：stock减（真实扣减），lock_stock减（释放锁定）
@@ -57,6 +58,11 @@
     </update>
 
     <!-- ④ 批量更新订单状态 -->
+    <!-- TODO(D10c-幂等): 该 UPDATE 缺 status 条件（应补 AND status = 0）。
+         风险：同一订单若被"MQ 消费者 + 定时任务"同时抓到、或定时任务重跑，
+         会被重复置为已关闭并再走一遍释放逻辑，导致 lock_stock 重复扣减、券/积分重复返还。
+         优化方向：改为条件更新 SET status=#{status} WHERE id IN (...) AND status=0 并校验影响行数；
+         或取消侧直接逐个调用已幂等的 cancelOrder(id)。详见 docs/后期优化文档.md #15 -->
     <update id="updateOrderStatus">
         UPDATE oms_order SET status = #{status}
         WHERE id IN
@@ -66,6 +72,8 @@
     </update>
 
     <!-- ⑤ 取消订单：只释放锁定库存 lock_stock减（stock不动，下单时没减过） -->
+    <!-- TODO(D10c-幂等): lock_stock 减缺下界保护（应补 AND lock_stock >= 对应数量，
+         并保证同一订单只释放一次），否则重复调用会把 lock_stock 扣成负数。详见 docs/后期优化文档.md #15 -->
     <update id="releaseSkuStockLock">
         UPDATE pms_sku_stock
         SET lock_stock = CASE id

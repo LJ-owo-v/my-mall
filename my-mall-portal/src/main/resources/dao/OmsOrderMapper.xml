@@ -144,7 +144,7 @@
       <include refid="Example_Where_Clause" />
     </if>
   </delete>
-  <insert id="insert" parameterType="com.mymall.portal.model.OmsOrder">
+  <insert id="insert" parameterType="com.mymall.portal.model.OmsOrder" useGeneratedKeys="true" keyProperty="id">
     insert into oms_order (id, member_id, coupon_id, 
       order_sn, create_time, member_username, 
       total_amount, pay_amount, freight_amount, 

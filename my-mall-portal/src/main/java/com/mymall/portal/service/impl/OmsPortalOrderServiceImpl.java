@@ -301,7 +301,6 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
         deleteCartItemList(cartPromotionItemList, currentMember);
 
         // ========== 14. 发送延迟消息（超时未支付自动取消） ==========
-        // TODO 需要引入RabbitMQ，30分钟未支付自动取消订单、释放库存、返还优惠券
         sendDelayMessageCancelOrder(order.getId());
 
         // TODO 更规范的做法是定义一个结果 DTO
@@ -378,7 +377,12 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
             ids.add(timeOutOrder.getId());
         }
 
-        // ④ 批量修改订单状态为"已关闭"(4)
+        // TODO(D10c-幂等): 此处用的是不带 status 条件的批量 UPDATE，随后逐个释放资源，
+        //   缺少"同一订单只释放一次"的保护。若与 CancelOrderReceiver 并发处理同一订单、或定时任务重跑，
+        //   会出现"订单已关闭却再走一遍释放" → lock_stock 被重复扣减、券/积分重复返还。
+        //   后期统一做：① updateOrderStatus 补 AND status = 0 并校验影响行数；
+        //   ② releaseSkuStockLock 补 lock_stock 下界保护；③ 或本方法改为逐个调用已幂等的 cancelOrder(id)。
+        //   详见 docs/后期优化文档.md #15        // ④ 批量修改订单状态为"已关闭"(4)
         portalOrderDao.updateOrderStatus(ids, 4);
 
         // ⑤ 遍历每个订单，逐个释放资源
@@ -607,6 +611,21 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
             orderMapper.updateByPrimaryKey(order);
         }else{
             Asserts.fail("只能删除已完成或已关闭的订单！");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void paySuccessByOrderSn(String orderSn, Integer payType) {
+        OmsOrderExample example =  new OmsOrderExample();
+        example.createCriteria()
+                .andOrderSnEqualTo(orderSn)
+                .andStatusEqualTo(0)
+                .andDeleteStatusEqualTo(0);
+        List<OmsOrder> orderList = orderMapper.selectByExample(example);
+        if(CollUtil.isNotEmpty(orderList)){
+            OmsOrder order = orderList.get(0);
+            paySuccess(order.getId(),payType);
         }
     }
 

@@ -77,6 +77,11 @@
         </dependency>
         <!-- D10 还需要支付宝沙箱 SDK：alipay-sdk-java（版本照抄原项目父 pom 的 alipay-sdk.version），
              加之前先确认本地仓库/中央仓库有该版本，避免像 D7 那样临时卡住 -->
+        <dependency>
+            <groupId>com.alipay.sdk</groupId>
+            <artifactId>alipay-sdk-java</artifactId>
+            <version>4.40.630.ALL</version>
+        </dependency>
     </dependencies>
 
     <build>

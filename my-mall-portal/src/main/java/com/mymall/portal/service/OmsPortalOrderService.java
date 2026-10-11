@@ -28,4 +28,6 @@ public interface OmsPortalOrderService {
     void confirmReceiveOrder(Long orderId);
 
     void deleteOrder(Long orderId);
+
+    void paySuccessByOrderSn(String outTradeNo, Integer payType);
 }
