@@ -118,6 +118,49 @@ redis-cli -a root123 -n 0 --scan --pattern 'mall-swarm:ums:member*'        # Ums
 - 下单 A/B 实测：响应均 `code=200 下单成功`；订单主表逐字段一致、明细一致、锁库存 `lock=2/1` 一致。
   老项目促销缺陷（`pay_amount` 为负、`realAmount` 为负、赠品积分偏大）两服务一致 → **照抄保留**（见 #3/#4）。
 
+## D10b 实测（支付宝支付 / 退货申请，6 端点）
+
+- **端点契约（`/alipay` 4 个都必须照抄"非 CommonResult"语义）**：
+  - `GET /alipay/pay`、`GET /alipay/webPay`：**裸写 HTML**（`Content-Type: text/html;charset=UTF-8`，无 `@ResponseBody`）；
+    `product_code` 分别为 `FAST_INSTANT_TRADE_PAY` / `QUICK_WAP_WAY`（类名是 `AlipayTrade**Wap**PayRequest`）。
+  - `POST /alipay/notify`：**裸返回字符串** `success`/`failure`；验签用 `AlipaySignature.rsaCheckV1`（`com.alipay.api.internal.util`），
+    `trade_status == TRADE_SUCCESS` 才调 `paySuccessByOrderSn(outTradeNo, 1)`（**payType 硬编码 1**）。
+  - `GET /alipay/query`：`CommonResult<String>`，data = `tradeStatus`；★ 照抄保留原缺陷：异常分支 `response` 为 null 会 **NPE**、`query_options` 传 `String[]`。
+- **`AlipayConfig` 的 3 个默认值不要挪进 yml**：`format="JSON"`、`charset="UTF-8"`、`signType="RSA2"`；
+  且 `new DefaultAlipayClient(url, appId, privateKey, format, charset, publicKey, signType)` —— **公钥在第 6 位**，顺序抄错必崩。
+- **沙箱凭证（当前缺口）**：`application.yml` 的 `alipay.appId/appPrivateKey/alipayPublicKey` 目前是占位值。
+  **没有真实凭证 → `pay`/`webPay` 只能验证"端点已注册 + 与 8085 同构失败"，不算功能通过**；密钥不要提交到 git（优先 Nacos）。
+- **退货申请**：`create()` 用 `insert`（非 `insertSelective`）、**无 `@Transactional`**；`OmsOrderReturnApplyParam` 是 `@Getter @Setter`（不是 `@Data`），16 字段。
+- **`/order/paySuccess` 端点映射**：D10a 曾有方法体但缺 `@RequestMapping`，本次补齐（老服务 65 端点里本来就有它）。
+
+## D10c 实测（订单超时取消：消费者 + 定时兜底）
+
+- **消费者**：`component/CancelOrderReceiver` = `@RabbitListener(queues="mall.order.cancel")`（类上）+ `@RabbitHandler handle(Long orderId)`（方法上）→ `cancelOrder(orderId)`。
+  队列名字面量必须与 `QueueEnum` 一致；实测启动后 `mall.order.cancel` 的 **consumers 1 → 2**（老服务 + 新服务各一个）。
+- **定时兜底**：`component/OrderTimeOutCancelTask`（`@Scheduled(cron="0 0/10 * ? * ?")`）**已按决策启用** —— 与原项目**有意差异**：
+  老项目该类 `@Component` 被注释、方法 `private` → **实际不生效**（兜底只靠 MQ）。启用时必须 `@Component` + **`public` 方法**
+  （`private` 不会被代理，`@Scheduled` 静默失效）。
+- **★ 两个运行期缺陷（都在本轮修复）**：
+  1. **`oms_order` insert 不回填主键**：MBG 的 `ReadOnlyCrossDomain` context 没给 `oms_order` 配 `<generatedKey>`，
+     导致 `order.getId()` 为 null → 明细 `order_id` 写成 NULL、`sendDelayMessageCancelOrder(null)` → NPE → **整个下单事务回滚（HTTP 500）**。
+     修：`OmsOrderMapper.xml` 的 insert 加 `useGeneratedKeys="true" keyProperty="id"`，并在 `generatorConfig.xml` 给 `oms_order`
+     补 `<generatedKey column="id" sqlStatement="MySql" identity="true"/>`（固化，防重跑 MBG 丢失）。
+  2. **`getTimeOutOrders` 捞到无明细订单 → 定时任务崩**：空 `orderItemList` 让 `releaseSkuStockLock` 的 `<foreach>` 空转，
+     生成非法 SQL `UPDATE pms_sku_stock SET lock_stock = CASE id END WHERE id IN`（`BadSqlGrammarException`）。
+     修：`getTimeOutOrders` 加 **`AND EXISTS (SELECT 1 FROM oms_order_item t2 WHERE t2.order_id = o.id)`**（只捞有明细的订单）——
+     既防崩，又避免"订单被置为已关闭但资源未释放"的**半取消**。老项目无此条件（因其任务为死代码从未暴露）。
+- **验证证据**：下单 `code=200` 且主键回填（订单 113/114）；超时取消 `status 0→4`、`lock_stock 2/1 → 0/0`；
+  **17:00:00 定时任务自然触发**：`getTimeOutOrders Total:0` → INFO `取消订单数量：0`、**无 `Unexpected error`**
+  （修复前 16:20/16:30 均报 `BadSqlGrammarException`）。
+- **逻辑溢出**：`getTimeOutOrders` 捞不到时方法在开头 `return 0`；"无明细订单"因此不会进入释放逻辑，有明细的订单仍正常处理。
+
+## TODO（D10c 遗留，按决策留后期统一做）
+
+- `updateOrderStatus` 批量改状态**缺 `AND status = 0`** → 与 MQ 消费者并发时可能重复处理同一订单（应校验影响行数）。
+- `releaseSkuStockLock` **缺空集合保护与 `lock_stock` 下界保护**（可被扣成负数）。
+- `cancelTimeOutOrder` 的 Java 侧未做空集合兜底（当前靠 SQL 的 `EXISTS` 拦住；建议再加 `if (!isEmpty) continue;` 作为纯兜底）。
+- 以上三处代码已就地标注 `TODO(D10c-幂等)`，详见 `docs/后期优化文档.md` #15 与 `D10c-任务书.md` §5.2。
+
 ## 验收（D9）
 - 只读端点：8085 vs 8092 逐字节对比（**各自用自己的 token**，因为跨服务借 token 会带旧类名 session）
 - 写端点：A/B 造数 + 清理
