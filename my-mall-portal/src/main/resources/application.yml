@@ -52,7 +52,7 @@ mybatis:
   mapper-locations:
     - classpath:dao/*.xml
   configuration:
-    map-underscore-to-camel-case: true
+    map-underscore-to-camel-case: false
 
 pagehelper:
   helper-dialect: mysql

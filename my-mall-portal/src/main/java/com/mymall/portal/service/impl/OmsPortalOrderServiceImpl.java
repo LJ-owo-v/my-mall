@@ -464,7 +464,7 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
 
         // 空结果直接返回
         if (CollUtil.isEmpty(orderList)) {
-            return CommonPage.of(pageNum, pageSize, total, Collections.emptyList());
+            return CommonPage.of(pageNum, pageSize, total, null);   // 空结果传 null：老服务此时不含 list 键（NON_NULL 省略）
         }
 
         // 批量查明细
