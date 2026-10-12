@@ -89,5 +89,9 @@
         <table tableName="ums_integration_consume_setting"/>
         <!-- D10a 新增：门户下单需要读 orderSetting（normalOrderOvertime/confirmOvertime） -->
         <table tableName="oms_order_setting"/>
+        <!-- D11 新增：门户商品详情需要 商品属性值；首页需要 秒杀活动/场次 -->
+        <table tableName="pms_product_attribute_value"/>
+        <table tableName="sms_flash_promotion"/>
+        <table tableName="sms_flash_promotion_session"/>
     </context>
 </generatorConfiguration>
