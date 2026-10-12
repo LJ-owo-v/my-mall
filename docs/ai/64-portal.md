@@ -176,6 +176,30 @@ redis-cli -a root123 -n 0 --scan --pattern 'mall-swarm:ums:member*'        # Ums
 - `cancelTimeOutOrder` 的 Java 侧未做空集合兜底（当前靠 SQL 的 `EXISTS` 拦住；建议再加 `if (!isEmpty) continue;` 作为纯兜底）。
 - 以上三处代码已就地标注 `TODO(D10c-幂等)`，详见 `docs/后期优化文档.md` #15 与 `D10c-任务书.md` §5.2。
 
+## D11 实测（首页 / 商品 / 品牌，12 端点）
+
+- **端点**：`/home` 6（content / recommendProductList / productCateList/{parentId} / subjectList / hotProductList / newProductList）
+  + `/product` 3（search / categoryTreeList / detail/{id}）+ `/brand` 3（recommendList / detail/{brandId} / productList）——**全部为公开端点**（无需登录）。
+- **★ `pageNum` 默认 0（0 基）**：`/product/search` 的 `pageNum` 默认 **0**，而 `/home`、`/brand` 的分页默认 1 —— 照抄老服务，勿"统一"。
+- **★★ 两处必须与老服务对齐的序列化/映射细节（D11 实测踩到并修复）**：
+  1. **`mybatis.configuration.map-underscore-to-camel-case` 必须为 `false`**（老服务用 MyBatis 默认值）。
+     若为 `true`：`SELECT p.*` 返回的 `detail_desc`/`brief` 等**未在 resultMap 中声明的列**会被 autoMapping 映射进 PO，
+     导致 `/home/content`、`/home/hotProductList`、`/home/newProductList`、`/brand/recommendList` **多输出**
+     `detailDesc`/`detailHtml`/`detailMobileHtml`/`brandStory`（实测 `/home/content` 由 10974B 膨胀到 26276B）。
+     老服务这些字段保持 null → 被全局 `NON_NULL` 过滤 → 不输出。
+  2. **`CommonPage.list` 不能加 `@JsonInclude(NON_EMPTY)`**：老服务**只在 list 为 null 时省略键**，为**空数组时照常输出 `[]`**。
+     实测：`/order/list`（空）→ 87B **无 list**；`/product/search`（空）→ 98B **有 `"list":[]`**。
+     正确做法：`list` 不加注解（靠全局 `NON_NULL`）+ `CommonPage.of()` **不要把 null 兜成 `emptyList()`** + 空结果处显式传 `null`。
+- **MBG 副作用（再次兑现）**：D11 为 3 张新跨域表（`pms_product_attribute_value`/`sms_flash_promotion`/`sms_flash_promotion_session`）重跑 MBG 时，
+  **削掉了 4 处手工内容**（`UmsMember.@JsonFormat`、`OmsOrderMapper.xml` 的 `useGeneratedKeys`、`SmsCouponHistoryMapper` 的 `releaseCoupon`×2）→ 已全部还原并校验。
+- **★ 运行期坑（新）**：`mvn -pl my-mall-portal spring-boot:run` **不带 `-am`** 会从**本地仓库旧 jar** 解析依赖；
+  而本地仓库 `my-mall-common-core` 里的 `UserDto` 仍是旧包名 `com.mymall.common.dto`
+  （源码放在 `com/mymall/common/dto/` 目录、`package` 声明却是 `com.macro.mall.common.dto` —— 并存期写法）→ 登录 500（`ClassNotFoundException`）。
+  解法：先 `mvn -o install -pl my-mall-common/my-mall-common-core -am -DskipTests`。另：**`-am` 与 `spring-boot:run` 不可组合**（会对每个依赖模块执行 run 目标）。
+- **XML 命名纪律**：`resources/dao/` 下**文件名必须与 namespace 一致**（曾出现文件名 `HmoeDao.xml`、namespace `HomeDao` 的拼写事故）；
+  改/删资源后要**清理 `target/classes/dao`**，否则残留旧拷贝会造成"同 namespace + 同 statement id → 启动即崩"（D6 老坑）。
+- **验收**：**30 PASS / 0 FAIL**（D11 全量 20 + D9/D10a 回归 10），与 8085 **逐字节一致**。
+
 ## 验收（D9）
 - 只读端点：8085 vs 8092 逐字节对比（**各自用自己的 token**，因为跨服务借 token 会带旧类名 session）
 - 写端点：A/B 造数 + 清理
