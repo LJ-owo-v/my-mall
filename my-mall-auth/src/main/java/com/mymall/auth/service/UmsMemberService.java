@@ -9,9 +9,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * 前台会员服务远程调用Service
- * 后期改my-mall-potal
+ * 后期改my-mall-portal
  */
-@FeignClient("mall-portal")
+@FeignClient("my-mall-portal")
 public interface UmsMemberService {
     @PostMapping("/sso/login")
     CommonResult login(@RequestParam("username") String username,

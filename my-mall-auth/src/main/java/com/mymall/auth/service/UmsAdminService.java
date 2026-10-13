@@ -10,9 +10,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * 后台用户管理Service
- * 后期改my-mall-admin
+ * 后期改my-mall-user
  */
-@FeignClient("mall-admin")
+@FeignClient("my-mall-user")
 public interface UmsAdminService {
 
     @PostMapping("/admin/login")

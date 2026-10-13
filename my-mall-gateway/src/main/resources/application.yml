@@ -17,37 +17,61 @@ spring:
         webflux:
           # 显式 5 条路由（与原项目等价）；不开启 discovery.locator，
           # 避免把所有注册服务（含 monitor）自动暴露成路由
+          #现在已经重新路由到新服务
           routes:
             - id: mall-auth
               uri: lb://my-mall-auth
+              predicates: [ Path=/mall-auth/** ]
+              filters: [ StripPrefix=1 ]
+
+            # ---------- /mall-admin/** 按前缀拆到 5 个新服务 ----------
+            # 后台管理模块
+            - id: mall-admin-user
+              uri: lb://my-mall-user
               predicates:
-                - Path=/mall-auth/**
-              filters:
-                - StripPrefix=1
-            - id: mall-admin
-              uri: lb://mall-admin
+                - Path=/mall-admin/admin/**,/mall-admin/memberLevel/**,/mall-admin/menu/**,/mall-admin/resource/**,/mall-admin/resourceCategory/**,/mall-admin/role/**
+              filters: [ StripPrefix=1 ]
+
+            # 产品管理模块
+
+            - id: mall-admin-product
+              uri: lb://my-mall-product
               predicates:
-                - Path=/mall-admin/**
-              filters:
-                - StripPrefix=1
+                - Path=/mall-admin/brand/**,/mall-admin/prefrenceArea/**,/mall-admin/product/**,/mall-admin/productAttribute/**,/mall-admin/productCategory/**,/mall-admin/sku/**,/mall-admin/subject/**
+              filters: [ StripPrefix=1 ]
+
+            # 营销管理模块
+            - id: mall-admin-marketing
+              uri: lb://my-mall-marketing
+              predicates:
+                - Path=/mall-admin/coupon/**,/mall-admin/couponHistory/**,/mall-admin/flash/**,/mall-admin/flashProductRelation/**,/mall-admin/flashSession/**,/mall-admin/home/**
+              filters: [ StripPrefix=1 ]
+
+            # 订单管理模块
+            - id: mall-admin-order
+              uri: lb://my-mall-order
+              predicates:
+                - Path=/mall-admin/companyAddress/**,/mall-admin/order/**,/mall-admin/orderSetting/**,/mall-admin/returnApply/**,/mall-admin/returnReason/**
+              filters: [ StripPrefix=1 ]
+
+            # 文件管理模块
+            - id: mall-admin-file
+              uri: lb://my-mall-file
+              predicates: [ Path=/mall-admin/aliyun/** ]
+              filters: [ StripPrefix=1 ]
+
+            # ---------- 其余两个域 ----------
+            # 前台门户模块
             - id: mall-portal
-              uri: lb://mall-portal
-              predicates:
-                - Path=/mall-portal/**
-              filters:
-                - StripPrefix=1
+              uri: lb://my-mall-portal
+              predicates: [ Path=/mall-portal/** ]
+              filters: [ StripPrefix=1 ]
+
+            # 搜索模块
             - id: mall-search
-              uri: lb://mall-search
-              predicates:
-                - Path=/mall-search/**
-              filters:
-                - StripPrefix=1
-            - id: mall-demo
-              uri: lb://mall-demo
-              predicates:
-                - Path=/mall-demo/**
-              filters:
-                - StripPrefix=1
+              uri: lb://my-mall-search
+              predicates: [ Path=/mall-search/** ]
+              filters: [ StripPrefix=1 ]
   data:
     redis:
       host: localhost
