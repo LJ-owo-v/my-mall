@@ -39,6 +39,10 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
         <!-- 需要调其他微服务时再打开（openfeign 会自动带 loadbalancer；本阶段 /admin/** 用不到）
         <dependency>
             <groupId>org.springframework.cloud</groupId>

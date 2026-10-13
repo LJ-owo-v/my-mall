@@ -24,10 +24,16 @@
                     <artifactId>my-mall-common-redis</artifactId>
                 </exclusion>
             </exclusions>
+
         </dependency>
+        <!-- ★ 本模块新增的中间件：Nacos（服务发现 + 配置管理） -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
         </dependency>
 
         <!-- ★ 本模块新增的中间件：Elasticsearch（版本由 Spring Boot BOM 管理，不要自己写版本号）

@@ -1,23 +1,22 @@
+server:
+  port: 8401                    # ← 各服务不同（见 §2 表格）
+
 spring:
+  application:
+    name: my-mall-auth         # ← 各服务不同
+
+  config:
+    import:
+      # ★ 写死 dataId（不要用 ${spring.profiles.active} 占位符：
+      #   import 发生在配置加载早期，占位符可能还没解析 → 会去找 "my-mall-product-.yaml"）
+      - optional:nacos:my-mall-auth-dev.yaml
   cloud:
     nacos:
-      discovery:
+      config:
         server-addr: localhost:8848
-        # 必须与原项目服务同一个命名空间，否则 Feign 按服务名找不到 mall-admin / mall-portal
         namespace: 9883b8e5-fd64-49bc-8e24-d21d5690b8d0
-
-      # ===== 可选：接入配置中心（dev 命名空间已有 mall-auth-dev.yaml；我用自己的 dataId 区分）=====
-      # 注意：直接在 nacos: 下面加 config:，不要再写一遍 cloud:/nacos:，否则会覆盖上面的 discovery
-      # config:
-      #   server-addr: localhost:8848
-      #   file-extension: yaml
-      #   namespace: 9883b8e5-fd64-49bc-8e24-d21d5690b8d0
-
-  # 启用配置中心时同时打开这段
-  # config:
-  #   import:
-  #     - nacos:my-mall-auth-dev.yaml?refreshEnabled=true
-
-logging:
-  level:
-    com.mymall.auth: debug
+        file-extension: yaml          # ★ 必须是 yaml
+        group: DEFAULT_GROUP
+      discovery:                      # 从原 application-dev.yml 合并进来
+        server-addr: localhost:8848
+        namespace: 9883b8e5-fd64-49bc-8e24-d21d5690b8d0

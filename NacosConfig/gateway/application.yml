@@ -1,0 +1,155 @@
+
+spring:
+  application:
+    name: my-mall-gateway
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848      # 与原项目同一个 Nacos；注册名用自己的，验证期可并存
+        namespace: 9883b8e5-fd64-49bc-8e24-d21d5690b8d0
+    gateway:
+      server:
+        webflux:
+          # 显式 5 条路由（与原项目等价）；不开启 discovery.locator，
+          # 避免把所有注册服务（含 monitor）自动暴露成路由
+          #现在已经重新路由到新服务
+          routes:
+            - id: mall-auth
+              uri: lb://my-mall-auth
+              predicates: [ Path=/mall-auth/** ]
+              filters: [ StripPrefix=1 ]
+
+            # ---------- /mall-admin/** 按前缀拆到 5 个新服务 ----------
+            # 后台管理模块
+            - id: mall-admin-user
+              uri: lb://my-mall-user
+              predicates:
+                - Path=/mall-admin/admin/**,/mall-admin/memberLevel/**,/mall-admin/menu/**,/mall-admin/resource/**,/mall-admin/resourceCategory/**,/mall-admin/role/**
+              filters: [ StripPrefix=1 ]
+
+            # 产品管理模块
+
+            - id: mall-admin-product
+              uri: lb://my-mall-product
+              predicates:
+                - Path=/mall-admin/brand/**,/mall-admin/prefrenceArea/**,/mall-admin/product/**,/mall-admin/productAttribute/**,/mall-admin/productCategory/**,/mall-admin/sku/**,/mall-admin/subject/**
+              filters: [ StripPrefix=1 ]
+
+            # 营销管理模块
+            - id: mall-admin-marketing
+              uri: lb://my-mall-marketing
+              predicates:
+                - Path=/mall-admin/coupon/**,/mall-admin/couponHistory/**,/mall-admin/flash/**,/mall-admin/flashProductRelation/**,/mall-admin/flashSession/**,/mall-admin/home/**
+              filters: [ StripPrefix=1 ]
+
+            # 订单管理模块
+            - id: mall-admin-order
+              uri: lb://my-mall-order
+              predicates:
+                - Path=/mall-admin/companyAddress/**,/mall-admin/order/**,/mall-admin/orderSetting/**,/mall-admin/returnApply/**,/mall-admin/returnReason/**
+              filters: [ StripPrefix=1 ]
+
+            # 文件管理模块
+            - id: mall-admin-file
+              uri: lb://my-mall-file
+              predicates: [ Path=/mall-admin/aliyun/** ]
+              filters: [ StripPrefix=1 ]
+
+            # ---------- 其余两个域 ----------
+            # 前台门户模块
+            - id: mall-portal
+              uri: lb://my-mall-portal
+              predicates: [ Path=/mall-portal/** ]
+              filters: [ StripPrefix=1 ]
+
+            # 搜索模块
+            - id: mall-search
+              uri: lb://my-mall-search
+              predicates: [ Path=/mall-search/** ]
+              filters: [ StripPrefix=1 ]
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      password: root123
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+# 白名单：与原项目 secure.ignore.urls 同一份（前缀保持一致，方便日后整体挪到 Nacos）
+secure:
+  ignore:
+    urls:
+      - "/doc.html"
+      - "/v3/api-docs/swagger-config"
+      - "/*/v3/api-docs/default"
+      - "/*/v3/api-docs"
+      - "/*/swagger-ui/**"
+      - "/webjars/**"
+      - "/favicon.ico"
+      - "/actuator/**"
+      - "/mall-auth/**"
+      - "/mall-search/**"
+      - "/mall-portal/sso/login"
+      - "/mall-portal/sso/register"
+      - "/mall-portal/sso/getAuthCode"
+      - "/mall-portal/home/**"
+      - "/mall-portal/product/**"
+      - "/mall-portal/brand/**"
+      - "/mall-portal/alipay/**"
+      - "/mall-admin/admin/login"
+      - "/mall-admin/admin/register"
+      - "/mall-admin/minio/upload"
+
+# 必须与原项目逐项一致：token-name 决定 Sa-Token 在 Redis 里的 key 前缀
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  is-read-header: true
+  is-read-cookie: false
+  timeout: 604800
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
+  is-print: false
+
+# 文档聚合（与原项目一致），否则 /doc.html 会消失
+knife4j:
+  gateway:
+    enabled: true
+    strategy: discover
+    discover:
+      version: openapi3
+      enabled: true
+      excluded-services: mall-monitor
+    tags-sorter: order
+    operations-sorter: order
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    gateway:
+      # 只能配 access（与 enabled 互斥）：unrestricted 才允许 switch.ps1 动态增删路由
+      access: unrestricted
+    health:
+      show-details: always
+
+my-mall:
+  probe:
+    enabled: false
+
+logging:
+  level:
+    root: info
+    com.mymall: debug

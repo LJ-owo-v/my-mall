@@ -31,8 +31,10 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
-        <!-- D3 再接配置中心：spring-cloud-starter-alibaba-nacos-config -->
-
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
         <!-- Redis 配置统一放 common-redis（含与 mall-swarm 对齐的序列化） -->
         <dependency>
             <groupId>com.mymall</groupId>

@@ -26,6 +26,10 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
         <!-- 阿里云 OSS SDK（本项目不使用 MinIO） -->
         <dependency>
             <groupId>com.aliyun.oss</groupId>
