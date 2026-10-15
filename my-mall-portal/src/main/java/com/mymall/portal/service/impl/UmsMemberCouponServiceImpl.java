@@ -58,14 +58,12 @@ public class UmsMemberCouponServiceImpl implements UmsMemberCouponService {
             Asserts.fail("优惠券还没到领取时间");
         }
 
-        // ⑤ 判断用户是否已领过（超过每人限领数量）
-        SmsCouponHistoryExample couponHistoryExample = new SmsCouponHistoryExample();
-        couponHistoryExample.createCriteria()
-                .andCouponIdEqualTo(couponId)
-                .andMemberIdEqualTo(currentMember.getId());
-        long count = couponHistoryMapper.countByExample(couponHistoryExample);
-        if (count >= coupon.getPerLimit()) {
-            Asserts.fail("您已经领取过该优惠券");
+        // ⑤ 【#7 修复】原子扣减券库存：把"检查 count>0"与"扣减"合并为一条原子语句。
+        //    原实现是"SELECT count → 应用层 count-1 → 整行回写"，并发下相互覆盖丢失扣减 → 超发。
+        //    影响行数=0 说明库存已领完，抛异常触发回滚。
+        int decreased = couponMapper.decreaseCount(couponId);
+        if (decreased == 0) {
+            Asserts.fail("手慢了，优惠券已被抢完");
         }
 
         // ⑥ 生成领取记录
@@ -77,16 +75,15 @@ public class UmsMemberCouponServiceImpl implements UmsMemberCouponService {
         couponHistory.setMemberNickname(currentMember.getNickname());
         couponHistory.setGetType(1);      // 1=主动领取
         couponHistory.setUseStatus(0);    // 0=未使用
-        couponHistoryMapper.insert(couponHistory);
 
-        // ⑦ 更新优惠券表：库存-1，领取数+1
-        // TODO 后期优化：高并发下可能超发，改用乐观锁
-        //  UPDATE sms_coupon SET count = count - 1, receive_count = receive_count + 1
-        //  WHERE id = #{id} AND count > 0
-        //  返回影响行数=0说明没抢到，回滚事务并提示"手慢了，优惠券已被抢完"
-        coupon.setCount(coupon.getCount() - 1);
-        coupon.setReceiveCount(coupon.getReceiveCount() == null ? 1 : coupon.getReceiveCount() + 1);
-        couponMapper.updateByPrimaryKey(coupon);
+        // ⑦ 【#8 修复】条件插入领取记录：仅当"已领数量 < per_limit"时才插入。
+        //    原实现是"countByExample 先查 → count>=perLimit 判断 → insert"，检查与插入分离（TOCTOU），
+        //    并发下同一会员连点两次都会读到 0 → 超领。
+        //    影响行数=0 说明已领满，抛异常触发回滚（同时撤销第⑤步的库存扣减）。
+        int inserted = couponHistoryMapper.insertIfUnderLimit(couponHistory);
+        if (inserted == 0) {
+            Asserts.fail("您已经领取过该优惠券");
+        }
     }
 
     @Override

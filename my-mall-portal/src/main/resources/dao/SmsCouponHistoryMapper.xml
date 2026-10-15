@@ -313,4 +313,27 @@
       AND use_status = 1
   </update>
 
+  <!-- 条件插入领取记录（修复 #8 限领绕过）
+       仅当「该会员已领取该券的数量 < per_limit」时才插入 —— 把"检查"与"插入"合并为一条语句。
+       WHERE 不成立时 SELECT 返回 0 行 → 插入 0 行 → 影响行数=0，调用方据此判定"已领满"。
+
+       注意：per_limit 取自 sms_coupon 表（同一语句内联查询），无需额外传参。
+       局限：REPEATABLE READ 下并发 COUNT(*) 可能读到同一快照，毫秒级窗口仍可能超领；
+             若要严格兜底需唯一索引（仅 per_limit=1）或分布式锁。详见方法注释。 -->
+  <insert id="insertIfUnderLimit" parameterType="com.mymall.portal.model.SmsCouponHistory">
+    INSERT INTO sms_coupon_history (coupon_id, member_id, coupon_code, member_nickname,
+                                    get_type, create_time, use_status, use_time, order_id, order_sn)
+    SELECT #{couponId,jdbcType=BIGINT}, #{memberId,jdbcType=BIGINT},
+           #{couponCode,jdbcType=VARCHAR}, #{memberNickname,jdbcType=VARCHAR},
+           #{getType,jdbcType=INTEGER}, #{createTime,jdbcType=TIMESTAMP},
+           #{useStatus,jdbcType=INTEGER}, #{useTime,jdbcType=TIMESTAMP},
+           #{orderId,jdbcType=BIGINT}, #{orderSn,jdbcType=VARCHAR}
+    FROM DUAL
+    WHERE (SELECT COUNT(*) FROM sms_coupon_history
+           WHERE coupon_id = #{couponId,jdbcType=BIGINT}
+             AND member_id = #{memberId,jdbcType=BIGINT})
+          &lt;
+          (SELECT per_limit FROM sms_coupon WHERE id = #{couponId,jdbcType=BIGINT})
+  </insert>
+
 </mapper>

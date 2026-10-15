@@ -32,4 +32,16 @@ public interface SmsCouponHistoryMapper {
      */
     int releaseCoupon(@Param("couponId") Long couponId, @Param("memberId") Long memberId);
 
+    /**
+     * 条件插入领取记录（修复 #8 限领绕过）。
+     * 仅当「该会员已领取该券的数量 < per_limit」时才插入 —— 把"检查"与"插入"合并为一条原子语句。
+     *
+     * 注意：因 InnoDB 默认 REPEATABLE READ 下，并发事务的 COUNT(*) 子查询可能读到同一快照，
+     *       本方法在"毫秒级并发窗口"下不能 100% 兜底；其价值在于把竞态窗口从"先查后写"
+     *       的整个方法跨度压缩到"单条语句"的瞬间，大幅降低超领概率。
+     *       若需要严格兜底，需配合唯一索引（仅 per_limit=1 时）或分布式锁。
+     *
+     * @return 受影响行数：1=插入成功；0=已领满（达到 per_limit）
+     */
+    int insertIfUnderLimit(SmsCouponHistory row);
 }

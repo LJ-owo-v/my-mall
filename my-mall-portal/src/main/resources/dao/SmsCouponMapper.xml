@@ -414,4 +414,15 @@
       member_level = #{memberLevel,jdbcType=INTEGER}
     where id = #{id,jdbcType=BIGINT}
   </update>
+
+  <!-- 原子扣减券库存（修复 #7 超发）
+       把「检查 count>0」与「扣减」合并为一条原子语句，按影响行数裁决。
+       原实现是"SELECT count → 应用层 count-1 → 整行回写"，并发下相互覆盖丢失扣减 → 超发。 -->
+  <update id="decreaseCount">
+    update sms_coupon
+    set count = count - 1,
+        receive_count = receive_count + 1
+    where id = #{couponId,jdbcType=BIGINT}
+      and count &gt; 0
+  </update>
 </mapper>
