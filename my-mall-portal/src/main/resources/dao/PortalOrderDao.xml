@@ -10,6 +10,16 @@
         </collection>
     </resultMap>
 
+    <!-- 对账结果映射（M5 #12）：每条违反不变量的记录映射为一行 ReconcileResult
+         说明：hitCount 统一为 1（"这条明细违反了"），调用方用 list.size() 判定 PASS/FAIL，
+               detail 承载人类可读的差异描述，verdict 由 Java 侧构造器计算。 -->
+    <resultMap id="reconcileResultMap" type="com.mymall.portal.domain.ReconcileResult">
+        <result property="code"     column="code"/>
+        <result property="name"     column="name"/>
+        <result property="detail"   column="detail"/>
+        <result property="hitCount" column="hit_count"/>
+    </resultMap>
+
     <!-- ① 查询订单详情（订单 + 明细） -->
     <select id="getDetail" resultMap="orderDetailMap">
         SELECT
@@ -167,5 +177,96 @@
           AND lock_stock >= #{quantity}
           AND stock >= #{quantity}
     </update>
+
+    <!-- ================================================================
+         对账查询（M5 #12）—— 全部【只读】，不修改任何数据
+         约定：只返回【违反不变量】的明细行；调用方以 list.size()==0 判定 PASS。
+         ================================================================ -->
+
+    <!-- I1 库存守恒：lock_stock 应等于该 SKU 在【待付款】订单中的数量之和。
+         直接验证 #9(丢失更新) / #15A(重复释放) / #16(重复扣减) 三项修复的成果。 -->
+    <select id="reconcileStockConservation" resultMap="reconcileResultMap">
+        SELECT 'I1' AS code,
+               '库存守恒' AS name,
+               1 AS hit_count,
+               CONCAT('SKU ', s.id,
+                      ': lock_stock=', s.lock_stock,
+                      ' 但待付款订单侧应为=',
+                      IFNULL((SELECT SUM(oi.product_quantity)
+                              FROM oms_order_item oi JOIN oms_order o ON o.id = oi.order_id
+                              WHERE oi.product_sku_id = s.id AND o.status = 0 AND o.delete_status = 0), 0),
+                      ' (差异 ', s.lock_stock - IFNULL((SELECT SUM(oi.product_quantity)
+                              FROM oms_order_item oi JOIN oms_order o ON o.id = oi.order_id
+                              WHERE oi.product_sku_id = s.id AND o.status = 0 AND o.delete_status = 0), 0), ')'
+               ) AS detail
+        FROM pms_sku_stock s
+        WHERE s.lock_stock &lt;&gt; IFNULL((SELECT SUM(oi.product_quantity)
+                                  FROM oms_order_item oi JOIN oms_order o ON o.id = oi.order_id
+                                  WHERE oi.product_sku_id = s.id AND o.status = 0 AND o.delete_status = 0), 0)
+        ORDER BY s.id
+        LIMIT 100
+    </select>
+
+    <!-- I2 无负值：stock >= 0 且 lock_stock >= 0（库里曾实存 -24/-8/-8） -->
+    <select id="reconcileNegativeStock" resultMap="reconcileResultMap">
+        SELECT 'I2' AS code,
+               '无负值' AS name,
+               1 AS hit_count,
+               CONCAT('SKU ', id, ': stock=', stock, ', lock_stock=', lock_stock) AS detail
+        FROM pms_sku_stock
+        WHERE stock &lt; 0 OR lock_stock &lt; 0
+        ORDER BY id
+        LIMIT 100
+    </select>
+
+    <!-- I3 锁定不超总量：lock_stock <= stock（超过即已超卖） -->
+    <select id="reconcileLockOverStock" resultMap="reconcileResultMap">
+        SELECT 'I3' AS code,
+               '锁定不超总量' AS name,
+               1 AS hit_count,
+               CONCAT('SKU ', id, ': lock_stock=', lock_stock, ' > stock=', stock,
+                      ' (超卖 ', lock_stock - stock, ' 件)') AS detail
+        FROM pms_sku_stock
+        WHERE lock_stock &gt; stock
+        ORDER BY (lock_stock - stock) DESC
+        LIMIT 100
+    </select>
+
+    <!-- I4 支付状态与时间一致：
+         status IN (1,2,3) 必须有 payment_time；status = 0 不应有。
+         注意：status = 4（已关闭）本就没有支付时间，不参与判定。 -->
+    <select id="reconcilePayStatusTime" resultMap="reconcileResultMap">
+        SELECT 'I4' AS code,
+               '支付状态与时间一致' AS name,
+               1 AS hit_count,
+               CONCAT('订单 ', id, '(', order_sn, ') status=', status,
+                      CASE WHEN status IN (1,2,3) AND payment_time IS NULL
+                           THEN ': 已付款却无支付时间'
+                           ELSE CONCAT(': 待付款却有支付时间=',
+                                       IFNULL(DATE_FORMAT(payment_time,'%Y-%m-%d %H:%i:%s'),'NULL'))
+                      END) AS detail
+        FROM oms_order
+        WHERE (status IN (1,2,3) AND payment_time IS NULL)
+           OR (status = 0 AND payment_time IS NOT NULL)
+        ORDER BY id DESC
+        LIMIT 100
+    </select>
+
+    <!-- I5 孤儿锁定：lock_stock > 0 但该 SKU 无任何【待付款】订单。
+         这种锁定没有任何代码路径会释放 —— 库存被永久占用（如 SKU 201）。 -->
+    <select id="reconcileOrphanLock" resultMap="reconcileResultMap">
+        SELECT 'I5' AS code,
+               '孤儿锁定' AS name,
+               1 AS hit_count,
+               CONCAT('SKU ', s.id, ': lock_stock=', s.lock_stock,
+                      ' 但无任何待付款订单 (库存被永久占用 ', s.lock_stock, ' 件)') AS detail
+        FROM pms_sku_stock s
+        WHERE s.lock_stock &gt; 0
+          AND IFNULL((SELECT SUM(oi.product_quantity)
+                      FROM oms_order_item oi JOIN oms_order o ON o.id = oi.order_id
+                      WHERE oi.product_sku_id = s.id AND o.status = 0 AND o.delete_status = 0), 0) = 0
+        ORDER BY s.lock_stock DESC
+        LIMIT 100
+    </select>
 
 </mapper>

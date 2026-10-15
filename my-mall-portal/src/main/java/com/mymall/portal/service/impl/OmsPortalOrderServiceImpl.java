@@ -751,6 +751,82 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
         return matched;
     }
 
+    /**
+     * 数据对账（M5 #12）—— 检查 5 条业务不变量，【只读】，不修改任何数据
+     *
+     * 目的：把"我怎么知道数据是对的"从【假设】变成【可验证】。
+     *
+     * 与日志的分工：
+     *   日志 = 点的、被动的、只覆盖"代码走到过的地方"
+     *   对账 = 面的、主动的、覆盖任何来源（历史遗留 / 手工改库 / 未知 bug）
+     *
+     * 典型能覆盖而日志覆盖不到的场景：
+     *   ① #9 那类"过程无异常、结果错误"——两个事务都成功提交，日志一行都不会有；
+     *   ② 历史遗留数据（如 SKU 201 的孤儿锁定，不知何时产生）；
+     *   ③ 绕过代码的操作（DBA 手工改库、数据迁移脚本）。
+     *
+     * 注意：判据本身也可能写错（例：I4 最初写成 status>=1 都要求 payment_time，
+     *       把 status=4「已关闭」的正常订单误报）—— 故每条不变量都需正例+反例双验证。
+     *
+     * @return 5 条不变量各自的结果（hitCount=0 即 PASS）
+     */
+    @Override
+    public List<ReconcileResult> reconcile() {
+        List<ReconcileResult> results = new ArrayList<>();
+
+        // I1 库存守恒：lock_stock == 待付款订单中的数量之和
+        //    ★ 直接验证 #9(丢失更新) / #15A(重复释放) / #16(重复扣减) 三项修复的成果
+        results.add(buildResult("I1", "库存守恒",
+                portalOrderDao.reconcileStockConservation()));
+
+        // I2 无负值：stock >= 0 且 lock_stock >= 0（库里曾实存 -24/-8/-8）
+        results.add(buildResult("I2", "无负值",
+                portalOrderDao.reconcileNegativeStock()));
+
+        // I3 锁定不超总量：lock_stock <= stock（超过即已超卖）
+        results.add(buildResult("I3", "锁定不超总量",
+                portalOrderDao.reconcileLockOverStock()));
+
+        // I4 支付状态与时间一致（status=4 已关闭不参与判定）
+        results.add(buildResult("I4", "支付状态与时间一致",
+                portalOrderDao.reconcilePayStatusTime()));
+
+        // I5 孤儿锁定：lock_stock > 0 但无任何待付款订单 → 无代码路径会释放
+        results.add(buildResult("I5", "孤儿锁定",
+                portalOrderDao.reconcileOrphanLock()));
+
+        return results;
+    }
+
+    /**
+     * 把某条不变量的差异明细聚合为一行结果
+     *
+     * @param code   不变量编号
+     * @param name   不变量名称
+     * @param rows   该不变量的差异明细（空 = PASS）
+     * @return 聚合后的对账结果
+     */
+    private ReconcileResult buildResult(String code, String name, List<ReconcileResult> rows) {
+        if (CollectionUtils.isEmpty(rows)) {
+            return new ReconcileResult(code, name, 0, "");
+        }
+        // 明细过多时只取前若干条，避免日志刷屏；命中数仍为真实条数
+        StringBuilder detail = new StringBuilder("[");
+        int shown = Math.min(rows.size(), 10);
+        for (int i = 0; i < shown; i++) {
+            if (i > 0) {
+                detail.append("; ");
+            }
+            detail.append(rows.get(i).getDetail());
+        }
+        if (rows.size() > shown) {
+            detail.append("; ... 另有 ").append(rows.size() - shown).append(" 条");
+        }
+        detail.append("]");
+
+        return new ReconcileResult(code, name, rows.size(), detail.toString());
+    }
+
 
     /**
      * 删除下单商品的购物车信息

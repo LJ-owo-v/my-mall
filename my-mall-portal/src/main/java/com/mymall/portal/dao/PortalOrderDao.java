@@ -1,6 +1,7 @@
 package com.mymall.portal.dao;
 
 import com.mymall.portal.domain.OmsOrderDetail;
+import com.mymall.portal.domain.ReconcileResult;
 import com.mymall.portal.model.OmsOrderItem;
 import org.apache.ibatis.annotations.Param;
 
@@ -83,4 +84,53 @@ public interface PortalOrderDao {
      * @return 受影响行数：1=扣减成功；0=锁定或库存不足（说明已被处理过）
      */
     int paySkuStockSafely(@Param("skuId") Long skuId, @Param("quantity") Integer quantity);
+
+    // ================================================================
+    // 对账查询（M5 #12）—— 全部【只读】，不修改任何数据
+    //
+    // 目的：把"我怎么知道数据是对的"从【假设】变成【可验证】。
+    // 每条方法返回该不变量的【差异明细】（违反不变量的一行一条），
+    // 调用方用 list.size() 判定 PASS/FAIL —— 空列表 = 通过。
+    // ================================================================
+
+    /**
+     * I1 库存守恒：lock_stock 应等于该 SKU 在【待付款】订单中的数量之和。
+     * 直接验证 #9(丢失更新) / #15A(重复释放) / #16(重复扣减) 三项修复的成果。
+     *
+     * @return 违反该不变量的 SKU 明细（空 = PASS）
+     */
+    List<ReconcileResult> reconcileStockConservation();
+
+    /**
+     * I2 无负值：stock &gt;= 0 且 lock_stock &gt;= 0。
+     * 库里曾实存 -24 / -8 / -8 三个负 lock_stock，此条是守卫的兜底验证。
+     *
+     * @return 负值明细（空 = PASS）
+     */
+    List<ReconcileResult> reconcileNegativeStock();
+
+    /**
+     * I3 锁定不超总量：lock_stock &lt;= stock（超过即已超卖）。
+     *
+     * @return 超卖明细（空 = PASS）
+     */
+    List<ReconcileResult> reconcileLockOverStock();
+
+    /**
+     * I4 支付状态与时间一致：
+     * status IN (1,2,3)（待发货/已发货/已完成）必须有 payment_time；
+     * status = 0（待付款）不应有 payment_time。
+     * 注意：status = 4（已关闭）本就没有支付时间，不参与判定。
+     *
+     * @return 不一致明细（空 = PASS）
+     */
+    List<ReconcileResult> reconcilePayStatusTime();
+
+    /**
+     * I5 孤儿锁定：lock_stock &gt; 0 但该 SKU 无任何【待付款】订单。
+     * 这种锁定【没有任何代码路径会释放】—— 库存被永久占用（如 SKU 201）。
+     *
+     * @return 孤儿锁定明细（空 = PASS）
+     */
+    List<ReconcileResult> reconcileOrphanLock();
 }
