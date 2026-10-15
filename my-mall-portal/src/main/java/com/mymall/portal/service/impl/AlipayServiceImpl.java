@@ -156,14 +156,27 @@ public class AlipayServiceImpl implements AlipayService {
 
             // 【SDK协议】TRADE_SUCCESS 是支付宝规定的"支付成功"状态值，不能改
             if ("TRADE_SUCCESS".equals(tradeStatus)) {
-                // 【项目业务】只有支付成功才返回 success
-                result = "success";
-                log.info("notify方法被调用了，tradeStatus:{}", tradeStatus);
-
                 // 【SDK协议】out_trade_no 是支付宝规定的商户订单号字段
                 String outTradeNo = params.get("out_trade_no");
+                // 【SDK协议】total_amount 是支付宝规定的"订单实际支付金额"字段（单位：元）
+                String totalAmount = params.get("total_amount");
 
-                // 【项目业务】调用 D10a 已写好的 paySuccess，更新订单状态、扣库存
+                // 【项目业务】【#16 资损缺口修复】先比对金额，不一致直接拒绝：
+                //   原实现只按 out_trade_no 找单就标记已支付，从不读 total_amount，
+                //   理论上可用 0.01 元的支付结掉 3699 元的订单。
+                //   校验失败时返回 failure（让支付宝重试/人工介入），绝不改单。
+                if (!portalOrderService.checkOrderAmount(outTradeNo, totalAmount)) {
+                    log.error("★ 支付回调金额校验未通过，拒绝处理！out_trade_no={}, total_amount={}",
+                            outTradeNo, totalAmount);
+                    return "failure";
+                }
+
+                // 【项目业务】只有验签通过、且金额一致才返回 success
+                result = "success";
+                log.info("notify方法被调用了，tradeStatus:{}, out_trade_no:{}, total_amount:{}",
+                        tradeStatus, outTradeNo, totalAmount);
+
+                // 【项目业务】调用已做幂等的 paySuccessByOrderSn，更新订单状态、扣库存
                 portalOrderService.paySuccessByOrderSn(outTradeNo, 1);
             } else {
                 // 其他状态：WAIT_BUYER_PAY(等待付款)、TRADE_CLOSED(交易关闭)、TRADE_FINISHED(交易结束)
@@ -215,14 +228,30 @@ public class AlipayServiceImpl implements AlipayService {
             log.error("查询支付宝账单异常！", e);
         }
 
+        // 【项目业务】【#16 修复】补判空：
+        //   上面 catch 分支只记日志、response 仍为 null，若直接调用 response.isSuccess()
+        //   会抛 NPE —— 而这恰好发生在"支付宝接口异常"时，即最需要兜底的时刻。
+        if (response == null) {
+            log.error("查询支付宝账单返回为空（SDK 调用异常），无法判断交易状态. outTradeNo={}, tradeNo={}",
+                    outTradeNo, tradeNo);
+            return null;
+        }
+
         // 【SDK】response.isSuccess() 判断支付宝接口调用是否成功（不是支付成功）
         if (response.isSuccess()) {
             log.info("查询支付宝账单成功！");
             // 【SDK协议】response.getTradeStatus() 取交易状态
             // 【SDK协议】TRADE_SUCCESS 是支付成功状态
             if ("TRADE_SUCCESS".equals(response.getTradeStatus())) {
-                // 【项目业务】查到支付成功，也调 paySuccess 更新订单（notify 回调丢失时的兜底）
-                portalOrderService.paySuccessByOrderSn(outTradeNo, 1);
+                // 【项目业务】查到支付成功，也要比对金额后再调 paySuccess（notify 回调丢失时的兜底）
+                //   query 场景下金额取自查询响应，与回调同样需要校验，避免绕过金额校验
+                String queriedAmount = response.getTotalAmount();
+                if (!portalOrderService.checkOrderAmount(outTradeNo, queriedAmount)) {
+                    log.error("★ 查询到的交易金额校验未通过，拒绝处理！outTradeNo={}, totalAmount={}",
+                            outTradeNo, queriedAmount);
+                } else {
+                    portalOrderService.paySuccessByOrderSn(outTradeNo, 1);
+                }
             }
         } else {
             // 【SDK】response.getSubCode() / getSubMsg() 可拿具体错误原因

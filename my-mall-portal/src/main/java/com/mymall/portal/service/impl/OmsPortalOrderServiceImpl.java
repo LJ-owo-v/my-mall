@@ -2,6 +2,7 @@ package com.mymall.portal.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.nacos.common.utils.CollectionUtils;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
@@ -694,6 +695,60 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
             OmsOrder order = orderList.get(0);
             paySuccess(order.getId(),payType);
         }
+    }
+
+    /**
+     * 校验支付宝回调金额与订单应付金额是否一致（修复 #16 资损缺口）
+     *
+     * 原实现只按 out_trade_no 找单就标记已支付，从不读回调的 total_amount，
+     * 理论上可用 0.01 元的支付结掉 3699 元的订单。
+     *
+     * 注意：金额比较必须用 BigDecimal.compareTo（忽略 scale 差异），
+     *      不能用 equals —— "3699.00".equals(new BigDecimal("3699.0")) 为 false。
+     *
+     * @param orderSn     商户订单号（回调参数 out_trade_no）
+     * @param totalAmount 回调实付金额字符串（回调参数 total_amount）
+     * @return true=一致；false=订单不存在 / 金额缺失或不合法 / 金额不一致
+     */
+    @Override
+    public boolean checkOrderAmount(String orderSn, String totalAmount) {
+        if (StrUtil.isEmpty(orderSn) || StrUtil.isEmpty(totalAmount)) {
+            LOGGER.warn("回调金额校验失败：订单号或金额为空. orderSn={}, totalAmount={}", orderSn, totalAmount);
+            return false;
+        }
+
+        OmsOrderExample example = new OmsOrderExample();
+        example.createCriteria()
+                .andOrderSnEqualTo(orderSn)
+                .andDeleteStatusEqualTo(0);
+        List<OmsOrder> orderList = orderMapper.selectByExample(example);
+        if (CollUtil.isEmpty(orderList)) {
+            LOGGER.warn("回调金额校验失败：订单不存在. orderSn={}", orderSn);
+            return false;
+        }
+
+        OmsOrder order = orderList.get(0);
+        if (order.getPayAmount() == null) {
+            LOGGER.warn("回调金额校验失败：订单应付金额为空. orderSn={}", orderSn);
+            return false;
+        }
+
+        BigDecimal callbackAmount;
+        try {
+            callbackAmount = new BigDecimal(totalAmount.trim());
+        } catch (NumberFormatException e) {
+            // 金额格式非法（非数字）→ 直接拒绝，避免异常冒泡影响回调
+            LOGGER.error("回调金额校验失败：金额格式非法. orderSn={}, totalAmount={}", orderSn, totalAmount);
+            return false;
+        }
+
+        boolean matched = order.getPayAmount().compareTo(callbackAmount) == 0;
+        if (!matched) {
+            // 这是资损风险信号，必须告警留痕
+            LOGGER.error("★ 支付回调金额与订单不符，拒绝处理！orderSn={}, 订单应付={}, 回调实付={}",
+                    orderSn, order.getPayAmount(), callbackAmount);
+        }
+        return matched;
     }
 
 
