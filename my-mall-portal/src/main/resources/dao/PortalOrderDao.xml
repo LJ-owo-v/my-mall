@@ -36,8 +36,10 @@
           AND EXISTS (SELECT 1 FROM oms_order_item t2 WHERE t2.order_id = o.id);
     </select>
 
-    <!-- ③ 支付成功：stock减（真实扣减），lock_stock减（释放锁定）
-         用 CASE WHEN 一次性更新多个不同SKU -->
+    <!-- ③ 【已由 ⑪ paySkuStockSafely 取代，保留仅为兼容】
+         支付成功：stock 减（真实扣减）、lock_stock 减（释放锁定），用 CASE WHEN 一次性更新多个 SKU。
+         ⚠️ 本语句【无任何下界保护】：重复调用会把 stock / lock_stock 扣成负数
+            （实测：连调 3 次 paySuccess → lock_stock 变成 -1 / -2）。新代码请用 ⑪。 -->
     <update id="updateSkuStock">
         UPDATE pms_sku_stock
         SET
@@ -134,6 +136,36 @@
         SET status = #{status}
         WHERE id = #{orderId}
           AND status = 0
+    </update>
+
+    <!-- ⑩ 支付幂等（修复 #16）
+         支付宝会重复投递同一回调（返回 failure 或响应超时即按策略重试，最长 24 小时），
+         /alipay/query 兜底也会重复调用 → 原实现无条件改单 + 无条件扣库存会反复扣减。
+         要点：
+           ① WHERE 带 status = 0 守卫：只有"本次把订单从待付款改成已支付"才返回 1；
+           ② 同一条语句写入 payment_time 与 pay_type，避免二次更新；
+           ③ 返回 0 表示订单已支付/已关闭 → 调用方【不得】再扣库存。 -->
+    <update id="payOrderIfPending">
+        UPDATE oms_order
+        SET status = 1,
+            payment_time = NOW(),
+            pay_type = #{payType}
+        WHERE id = #{orderId}
+          AND status = 0
+    </update>
+
+    <!-- ⑪ 支付成功：真实扣减库存并释放锁定（带下界保护，修复 #16 配套）
+         要点：
+           ① 逐 SKU 更新，替代原 CASE WHEN 批量写法（后者无法对每个 SKU 单独判定）；
+           ② WHERE 同时守卫 lock_stock 与 stock —— 任一不足时不动它，避免扣成负数；
+           ③ 返回 0 说明锁定或库存不足（已被处理过），调用方记告警但不再扣减。 -->
+    <update id="paySkuStockSafely">
+        UPDATE pms_sku_stock
+        SET stock = stock - #{quantity},
+            lock_stock = lock_stock - #{quantity}
+        WHERE id = #{skuId}
+          AND lock_stock >= #{quantity}
+          AND stock >= #{quantity}
     </update>
 
 </mapper>

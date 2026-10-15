@@ -60,4 +60,27 @@ public interface PortalOrderDao {
      *                     0=已被其他路径（MQ 消费者 / 定时任务 / 并发请求）处理过 → 不得重复释放
      */
     int updateOrderStatusByIdIfPending(@Param("orderId") Long orderId, @Param("status") Integer status);
+
+    /**
+     * 支付幂等（修复 #16）：仅当订单当前是待付款(0) 时才置为已支付(1)，
+     * 并在同一条语句里写入支付时间与支付方式。
+     * <p>
+     * 支付宝会<b>重复投递</b>同一回调（返回 failure 或响应超时即按策略重试，最长 24 小时），
+     * {@code query} 兜底也会重复调用；原实现无条件改单 + 无条件扣库存，
+     * 导致重复回调反复扣减 stock、并把 lock_stock 扣成负数。
+     *
+     * @return 受影响行数：1=本次成功标记为已支付（调用方据此扣库存）；
+     *                     0=订单已支付/已关闭 → <b>不得重复扣减</b>
+     */
+    int payOrderIfPending(@Param("orderId") Long orderId, @Param("payType") Integer payType);
+
+    /**
+     * 支付成功：真实扣减库存并释放锁定（<b>带下界保护</b>，修复 #16 配套）。
+     * WHERE 同时守卫 lock_stock 与 stock：任一不足时不动它，避免扣成负数。
+     *
+     * @param skuId    商品 SKU id
+     * @param quantity 本次扣减数量
+     * @return 受影响行数：1=扣减成功；0=锁定或库存不足（说明已被处理过）
+     */
+    int paySkuStockSafely(@Param("skuId") Long skuId, @Param("quantity") Integer quantity);
 }

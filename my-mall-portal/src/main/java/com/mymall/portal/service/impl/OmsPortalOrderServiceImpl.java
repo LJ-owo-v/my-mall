@@ -339,27 +339,46 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      *   下单锁定：stock - n，lock_stock + n（暂时锁住）
      *   支付成功：lock_stock - n（锁定转真实扣减，stock不变）
      *   取消订单：stock + n，lock_stock - n（释放）
-     *   TODO 后期幂等
+     *   【#16 已修复幂等】用 payOrderIfPending 的影响行数裁决"谁有权扣库存"
      * @param orderId 订单ID
      * @param payType 支付方式（1支付宝，2微信）
-     * @return 库存更新影响行数
+     * @return 库存更新影响行数；返回 0 表示订单已支付/已关闭（重复回调）→ 未做任何扣减
      */
     @Override
     @Transactional
     public Integer paySuccess(Long orderId, Integer payType) {
-        // ① 修改订单支付状态
-        OmsOrder order = new OmsOrder();
-        order.setId(orderId);
-        order.setStatus(1);                    // 0待付款 → 1待发货
-        order.setPaymentTime(new Date());      // 支付时间
-        order.setPayType(payType);             // 支付方式
-        orderMapper.updateByPrimaryKeySelective(order);
+        // ① 【#16 幂等】原子裁决：只有"本次把订单从待付款改成已支付"才继续扣库存。
+        //    支付宝会重复投递同一回调（返回 failure 或响应超时即按策略重试，最长 24 小时），
+        //    /alipay/query 兜底也会重复调用；原实现是无条件改单 + 无条件扣库存，
+        //    实测连调 3 次 → stock 5→4→3→2、lock_stock 1→0→-1→-2（重复扣减且扣成负数）。
+        int paid = portalOrderDao.payOrderIfPending(orderId, payType);
+        if (paid == 0) {
+            // 订单已支付或已关闭 → 重复回调 / 已取消后补发回调，直接跳过，绝不重复扣减
+            LOGGER.info("订单已支付或已关闭，跳过重复支付处理: orderId={}, payType={}", orderId, payType);
+            return 0;
+        }
 
         // ② 查询订单明细
         OmsOrderDetail orderDetail = portalOrderDao.getDetail(orderId);
+        if (orderDetail == null || CollectionUtils.isEmpty(orderDetail.getOrderItemList())) {
+            // 防御性判空（原实现此处会 NPE）
+            LOGGER.warn("订单明细为空，跳过库存扣减: orderId={}", orderId);
+            return 0;
+        }
 
-        // ③ 恢复锁定库存，扣减真实库存（lock_stock 减回）
-        int count = portalOrderDao.updateSkuStock(orderDetail.getOrderItemList());
+        // ③ 扣减真实库存并释放锁定（★ 逐 SKU + 带下界保护，见 PortalOrderDao.paySkuStockSafely）
+        int count = 0;
+        for (OmsOrderItem item : orderDetail.getOrderItemList()) {
+            int affected = portalOrderDao.paySkuStockSafely(
+                    item.getProductSkuId(), item.getProductQuantity());
+            if (affected == 0) {
+                // 锁定或库存不足：说明该 SKU 已被处理过（重复回调 / 数据异常）。
+                // 只告警、不抛异常 —— 订单状态已改为已支付，不宜回滚。
+                LOGGER.warn("扣减库存未生效（锁定或库存不足）: orderId={}, skuId={}, quantity={}",
+                        orderId, item.getProductSkuId(), item.getProductQuantity());
+            }
+            count += affected;
+        }
 
         return count;
     }
