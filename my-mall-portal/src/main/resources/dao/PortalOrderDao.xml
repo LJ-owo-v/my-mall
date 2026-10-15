@@ -57,6 +57,18 @@
         </foreach>
     </update>
 
+    <!-- ⑥ 下单锁定库存：原子条件更新，修复「查-改-写」丢失更新（docs/后期优化文档.md #9）
+         要点：
+           ① lock_stock = lock_stock + #{quantity} 由 DB 侧自增，避免应用层读到旧值后整行回写覆盖；
+           ② WHERE 带 stock - lock_stock >= #{quantity} 守卫，把「检查」与「扣减」合并为一条原子语句；
+           ③ 影响行数=0 表示可售不足，调用方据此抛「库存不足，无法下单」（与老服务文案一致）。 -->
+    <update id="lockStockSafely">
+        UPDATE pms_sku_stock
+        SET lock_stock = lock_stock + #{quantity}
+        WHERE id = #{skuId}
+          AND stock - lock_stock >= #{quantity}
+    </update>
+
     <!-- ④ 批量更新订单状态 -->
     <!-- TODO(D10c-幂等): 该 UPDATE 缺 status 条件（应补 AND status = 0）。
          风险：同一订单若被"MQ 消费者 + 定时任务"同时抓到、或定时任务重跑，

@@ -864,18 +864,24 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      * 用户取消/超时：lock_stock 减少，stock 加回去（释放）
      *
      * @param cartPromotionItemList 购物车促销商品列表
-     * TODO解决防卖超问题，利用InnnoDB底层update行级锁，实现
+     * 防超卖：用 InnoDB 行级锁 + 原子条件更新（见 PortalOrderDao.lockStockSafely）。
+     * 原实现是「查出整行 → 应用层加 → 整行回写」，并发下相互覆盖造成丢失更新（实测 9 并发丢 7 次）。
      */
     private void lockStock(List<CartPromotionItem> cartPromotionItemList) {
+        // ① 先合并同一 SKU 的数量：购物车可能对同一 SKU 存在多行，
+        //    逐行判定会出现「前几行锁定成功、后面失败再回滚」的无效开销。
+        Map<Long, Integer> qtyBySku = new LinkedHashMap<>();
         for (CartPromotionItem item : cartPromotionItemList) {
-            // ① 查出SKU当前库存
-            PmsSkuStock skuStock = skuStockMapper.selectByPrimaryKey(item.getProductSkuId());
+            qtyBySku.merge(item.getProductSkuId(), item.getQuantity(), Integer::sum);
+        }
 
-            // ② 锁定库存加上购买数量
-            skuStock.setLockStock(skuStock.getLockStock() + item.getQuantity());
-
-            // ③ 更新
-            skuStockMapper.updateByPrimaryKeySelective(skuStock);
+        // ② 逐个 SKU 原子加锁：影响行数=0 说明可售不足，直接失败（外层 @Transactional 整体回滚）
+        for (Map.Entry<Long, Integer> entry : qtyBySku.entrySet()) {
+            int affected = portalOrderDao.lockStockSafely(entry.getKey(), entry.getValue());
+            if (affected == 0) {
+                // 文案与老服务一致（同时也与本类第 165 行的预检查文案保持一致）
+                Asserts.fail("库存不足，无法下单");
+            }
         }
     }
 
