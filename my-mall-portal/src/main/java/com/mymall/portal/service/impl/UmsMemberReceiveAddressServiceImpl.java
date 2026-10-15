@@ -35,7 +35,7 @@ public class UmsMemberReceiveAddressServiceImpl implements UmsMemberReceiveAddre
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int update(Long id, UmsMemberReceiveAddress address) {
         // ① id设为null，因为后面用example条件更新，不是按主键更新
         address.setId(null);

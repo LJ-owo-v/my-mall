@@ -36,7 +36,7 @@ public class UmsMemberCouponServiceImpl implements UmsMemberCouponService {
     @Autowired
     private PmsProductMapper productMapper;
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void add(Long couponId) {
         // ① 获取当前登录会员
         UmsMember currentMember = memberService.getCurrentMember();

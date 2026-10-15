@@ -31,7 +31,7 @@ public class SmsCouponServiceImpl  implements SmsCouponService{
     private SmsCouponDao couponDao;
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int create(SmsCouponParam couponParam) {
         couponParam.setCount(couponParam.getPublishCount());
         couponParam.setUseCount(0);
@@ -63,7 +63,7 @@ public class SmsCouponServiceImpl  implements SmsCouponService{
 
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int delete(Long id) {
         //删除优惠券
         int count = couponMapper.deleteByPrimaryKey(id);
@@ -88,7 +88,7 @@ public class SmsCouponServiceImpl  implements SmsCouponService{
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int update(Long id, SmsCouponParam couponParam) {
         couponParam.setId(id);
         int count = couponMapper.updateByPrimaryKey(couponParam);

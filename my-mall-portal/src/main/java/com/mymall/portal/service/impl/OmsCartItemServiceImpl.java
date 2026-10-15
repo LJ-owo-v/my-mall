@@ -33,7 +33,7 @@ public class OmsCartItemServiceImpl implements OmsCartItemService {
     @Autowired
     private PortalProductDao productDao;
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int add(OmsCartItem cartItem) {
         int count;
 

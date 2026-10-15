@@ -36,7 +36,7 @@ public class PmsProductAttributeServiceImpl implements PmsProductAttributeServic
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int create(PmsProductAttributeParam pmsProductAttributeParam) {
         PmsProductAttribute pmsProductAttribute = new PmsProductAttribute();
         BeanUtils.copyProperties(pmsProductAttributeParam, pmsProductAttribute);
@@ -68,7 +68,7 @@ public class PmsProductAttributeServiceImpl implements PmsProductAttributeServic
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int delete(List<Long> ids) {
         // ① 先查第一条属性，拿到 type 和它属于哪个分类
         // （假设批量删除的都是同一个分类下的属性）

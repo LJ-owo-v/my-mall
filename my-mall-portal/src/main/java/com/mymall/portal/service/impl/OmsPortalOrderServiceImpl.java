@@ -128,7 +128,7 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      * TODO 跨模块操作（扣库存、扣优惠券）需要分布式事务
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> generateOrder(OrderParam orderParam) {
         List<OmsOrderItem> orderItemList = new ArrayList<>();
 
@@ -346,7 +346,7 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      * @return 库存更新影响行数；返回 0 表示订单已支付/已关闭（重复回调）→ 未做任何扣减
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public Integer paySuccess(Long orderId, Integer payType) {
         // ① 【#16 幂等】原子裁决：只有"本次把订单从待付款改成已支付"才继续扣库存。
         //    支付宝会重复投递同一回调（返回 failure 或响应超时即按策略重试，最长 24 小时），
@@ -394,9 +394,13 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      *   ③ 返还使用的积分
      *
      * @return 取消的订单数量
+     * 【#15-B】显式声明 rollbackFor = Exception.class：
+     *   Spring 默认只对 RuntimeException 回滚，受检异常（SQLException/IOException 等）
+     *   会【不回滚但仍提交】—— 释放库存/退券/退积分是顺序执行的，
+     *   若中间抛受检异常就会留下"库存已释放、券已退、但订单还是待付款"的半成品状态。
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public Integer cancelTimeOutOrder() {
         Integer count = 0;
 
@@ -573,7 +577,7 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      * @param orderId 订单ID
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void cancelOrder(Long orderId) {
         // ① 查询订单（★ 不再带 status=0 条件：改由下面的"原子裁决"决定谁有权取消，
         //    否则仍是"先查后写"，并发下两个请求都能通过检查 → 重复释放资源）
@@ -683,7 +687,7 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void paySuccessByOrderSn(String orderSn, Integer payType) {
         OmsOrderExample example =  new OmsOrderExample();
         example.createCriteria()

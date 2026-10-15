@@ -34,7 +34,7 @@ public class PmsProductCategoryImpl  implements PmsProductCategoryService {
      * @param pmsProductCategoryParam
      * @return
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public int create(PmsProductCategoryParam pmsProductCategoryParam) {
         PmsProductCategory productCategory = new PmsProductCategory();
@@ -57,7 +57,7 @@ public class PmsProductCategoryImpl  implements PmsProductCategoryService {
      * @param pmsProductCategoryParam
      * @return
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public int update(Long id, PmsProductCategoryParam pmsProductCategoryParam) {
         PmsProductCategory productCategory = new PmsProductCategory();

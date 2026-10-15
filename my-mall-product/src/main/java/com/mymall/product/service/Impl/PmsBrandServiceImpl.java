@@ -37,7 +37,7 @@ public class PmsBrandServiceImpl implements PmsBrandService {
         }
         return brandMapper.insertSelective(pmsBrand);
     }
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public int updateBrand(Long id, PmsBrandParam pmsBrandParam) {
         PmsBrand pmsBrand = new PmsBrand();

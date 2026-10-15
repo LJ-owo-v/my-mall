@@ -34,7 +34,7 @@ public class OmsOrderServiceImpl implements OmsOrderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int delivery(List<OmsOrderDeliveryParam> deliveryParamList) {
         if (CollectionUtils.isEmpty(deliveryParamList)) return 0;
         //批量发货
@@ -55,7 +55,7 @@ public class OmsOrderServiceImpl implements OmsOrderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int close(List<Long> ids, String note) {
         if (CollectionUtils.isEmpty(ids)) return 0;
         OmsOrder record = new OmsOrder();
@@ -116,7 +116,7 @@ public class OmsOrderServiceImpl implements OmsOrderService {
 
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateReceiverInfo(OmsReceiverInfoParam receiverInfoParam) {
         OmsOrder order = new OmsOrder();
         order.setId(receiverInfoParam.getOrderId());
@@ -141,7 +141,7 @@ public class OmsOrderServiceImpl implements OmsOrderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateMoneyInfo(OmsMoneyInfoParam moneyInfoParam) {
         OmsOrder order = new OmsOrder();
         order.setId(moneyInfoParam.getOrderId());
@@ -162,7 +162,7 @@ public class OmsOrderServiceImpl implements OmsOrderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateNote(Long id, String note, Integer status) {
         OmsOrder order = new OmsOrder();
         order.setId(id);

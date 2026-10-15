@@ -68,7 +68,7 @@ public class PmsProductServiceImpl implements PmsProductService {
     private CmsPrefrenceAreaProductRelationMapper prefrenceAreaProductRelationMapper;
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int create(PmsProductParam productParam) {
         // ① 写商品主表
         PmsProduct product = new PmsProduct();
@@ -222,7 +222,7 @@ public class PmsProductServiceImpl implements PmsProductService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int update(Long id, PmsProductParam productParam) {
         // ① 更新商品主表
         productParam.setId(id);
@@ -371,7 +371,7 @@ public class PmsProductServiceImpl implements PmsProductService {
      */
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateVerifyStatus(List<Long> ids, Integer verifyStatus, String detail) {
         if (CollectionUtils.isEmpty(ids)) {
             return 0;
