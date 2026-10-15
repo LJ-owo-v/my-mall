@@ -97,9 +97,10 @@
         </foreach>
     </update>
 
-    <!-- ⑤ 取消订单：只释放锁定库存 lock_stock减（stock不动，下单时没减过） -->
-    <!-- TODO(D10c-幂等): lock_stock 减缺下界保护（应补 AND lock_stock >= 对应数量，
-         并保证同一订单只释放一次），否则重复调用会把 lock_stock 扣成负数。详见 docs/后期优化文档.md #15 -->
+    <!-- ⑤ 【已由 ⑧ releaseSkuStockLockSafely 取代，保留仅为兼容】
+         取消订单：只释放锁定库存 lock_stock 减（stock 不动，下单时没减过）。
+         ⚠️ 本语句【无下界保护】：重复调用会把 lock_stock 扣成负数（#15-A 的成因，
+            实测库中出现过 -24 / -8 等脏值）。新代码请用 ⑧。 -->
     <update id="releaseSkuStockLock">
         UPDATE pms_sku_stock
         SET lock_stock = CASE id
@@ -111,6 +112,28 @@
         <foreach collection="itemList" item="item" separator="," open="(" close=")">
             #{item.productSkuId}
         </foreach>
+    </update>
+
+    <!-- ⑧ 释放单个 SKU 的锁定库存【带下界保护】（修复 #15-A）
+         要点：
+           ① WHERE 带 lock_stock >= #{quantity} 守卫 —— 锁定值不足时不动它，避免减成负数；
+           ② 影响行数=0 表示"锁定值不足"，即该 SKU 已被释放过（重复取消 / MQ 与定时任务并发）
+              或数据异常，调用方据此记告警但不再扣减。 -->
+    <update id="releaseSkuStockLockSafely">
+        UPDATE pms_sku_stock
+        SET lock_stock = lock_stock - #{quantity}
+        WHERE id = #{skuId}
+          AND lock_stock >= #{quantity}
+    </update>
+
+    <!-- ⑨ 原子状态裁决（消除"先查后写"的 TOCTOU，修复 #15-A）
+         只有"本次调用把订单从待付款(0) 改成目标状态"才返回 1；
+         返回 0 说明已被其他路径处理过 → 调用方不得再释放库存/券/积分。 -->
+    <update id="updateOrderStatusByIdIfPending">
+        UPDATE oms_order
+        SET status = #{status}
+        WHERE id = #{orderId}
+          AND status = 0
     </update>
 
 </mapper>

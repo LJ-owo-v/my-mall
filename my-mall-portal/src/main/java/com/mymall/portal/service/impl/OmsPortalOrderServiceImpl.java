@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OmsPortalOrderServiceImpl.class);
     @Autowired
     private UmsMemberService memberService;
     @Autowired
@@ -394,18 +397,31 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
             ids.add(timeOutOrder.getId());
         }
 
-        // TODO(D10c-幂等): 此处用的是不带 status 条件的批量 UPDATE，随后逐个释放资源，
-        //   缺少"同一订单只释放一次"的保护。若与 CancelOrderReceiver 并发处理同一订单、或定时任务重跑，
-        //   会出现"订单已关闭却再走一遍释放" → lock_stock 被重复扣减、券/积分重复返还。
-        //   后期统一做：① updateOrderStatus 补 AND status = 0 并校验影响行数；
-        //   ② releaseSkuStockLock 补 lock_stock 下界保护；③ 或本方法改为逐个调用已幂等的 cancelOrder(id)。
-        //   详见 docs/后期优化文档.md #15        // ④ 批量修改订单状态为"已关闭"(4)
-        portalOrderDao.updateOrderStatus(ids, 4);
-
-        // ⑤ 遍历每个订单，逐个释放资源
+        // ④ 【#15-A 修复】逐个订单做"原子状态裁决"，只有真正被本次调用关闭的订单才释放资源。
+        //    原实现是"批量 UPDATE（无 status 条件）+ 逐个释放"，与 MQ 消费者并发或定时任务重跑时
+        //    会对同一订单重复释放 → lock_stock 被扣成负数（实测库中出现过 -24/-8 脏值）。
+        //    改用 updateOrderStatusByIdIfPending 返回的影响行数来裁决：1=本次关闭成功，0=已被处理。
+        int processed = 0;
         for (OmsOrderDetail timeOutOrder : timeOutOrders) {
-            // 5.1 解除商品库存锁定（lock_stock减，stock不动）
-            portalOrderDao.releaseSkuStockLock(timeOutOrder.getOrderItemList());
+            int closed = portalOrderDao.updateOrderStatusByIdIfPending(timeOutOrder.getId(), 4);
+            if (closed == 0) {
+                // 已被其他路径（MQ 消费者 / 上一轮定时任务 / 并发请求）关闭 → 跳过，绝不重复释放
+                LOGGER.info("订单已被其他路径取消，跳过资源释放: orderId={}", timeOutOrder.getId());
+                continue;
+            }
+
+            // 5.1 解除商品库存锁定（★ 逐 SKU + 带下界保护）
+            List<OmsOrderItem> itemList = timeOutOrder.getOrderItemList();
+            if (!CollectionUtils.isEmpty(itemList)) {
+                for (OmsOrderItem item : itemList) {
+                    int released = portalOrderDao.releaseSkuStockLockSafely(
+                            item.getProductSkuId(), item.getProductQuantity());
+                    if (released == 0) {
+                        LOGGER.warn("释放库存锁定未生效（可能已被释放过）: orderId={}, skuId={}, quantity={}",
+                                timeOutOrder.getId(), item.getProductSkuId(), item.getProductQuantity());
+                    }
+                }
+            }
 
             // 5.2 返还优惠券（use_status 改回0未使用）
             updateCouponStatus(timeOutOrder.getCouponId(), timeOutOrder.getMemberId(), 0);
@@ -417,9 +433,12 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
                         timeOutOrder.getMemberId(),
                         member.getIntegration() + timeOutOrder.getUseIntegration());
             }
+
+            processed++;
         }
 
-        return timeOutOrders.size();
+        // 返回值语义不变（本方法接口声明为"取消的订单数量"），但现在是"本次真正处理的订单数"
+        return processed;
     }
 
 
@@ -536,33 +555,45 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
     @Override
     @Transactional
     public void cancelOrder(Long orderId) {
-        // ① 查询未付款且未删除的订单（只有待付款状态才能取消）
+        // ① 查询订单（★ 不再带 status=0 条件：改由下面的"原子裁决"决定谁有权取消，
+        //    否则仍是"先查后写"，并发下两个请求都能通过检查 → 重复释放资源）
         OmsOrderExample example = new OmsOrderExample();
         example.createCriteria()
                 .andIdEqualTo(orderId)
-                .andStatusEqualTo(0)        // 待付款
                 .andDeleteStatusEqualTo(0); // 未删除
         List<OmsOrder> cancelOrderList = orderMapper.selectByExample(example);
 
-        // 订单不存在或不是待付款状态，直接返回（幂等：已取消/已支付的不处理）
         if (CollectionUtils.isEmpty(cancelOrderList)) {
             return;
         }
 
         OmsOrder cancelOrder = cancelOrderList.get(0);
 
-        // ② 修改订单状态为已关闭(4)
-        cancelOrder.setStatus(4);
-        orderMapper.updateByPrimaryKeySelective(cancelOrder);
+        // ② ★ 原子状态裁决（#15-A）：只有"本次调用把订单从待付款改成已关闭"才返回 1。
+        //    返回 0 说明已被其他路径（MQ 消费者 / 定时任务 / 并发请求）处理过 → 直接返回，
+        //    绝不能再去释放库存/券/积分，否则 lock_stock 会被重复扣减成负数。
+        int closed = portalOrderDao.updateOrderStatusByIdIfPending(orderId, 4);
+        if (closed == 0) {
+            return;
+        }
 
         // ③ 查询订单明细
         OmsOrderItemExample orderItemExample = new OmsOrderItemExample();
         orderItemExample.createCriteria().andOrderIdEqualTo(orderId);
         List<OmsOrderItem> orderItemList = orderItemMapper.selectByExample(orderItemExample);
 
-        // ④ 释放库存锁定（lock_stock减回，stock不动，因为下单时没减stock）
+        // ④ 释放库存锁定（★ 逐 SKU + 带下界保护，见 PortalOrderDao.releaseSkuStockLockSafely）
         if (!CollectionUtils.isEmpty(orderItemList)) {
-            portalOrderDao.releaseSkuStockLock(orderItemList);
+            for (OmsOrderItem item : orderItemList) {
+                int released = portalOrderDao.releaseSkuStockLockSafely(
+                        item.getProductSkuId(), item.getProductQuantity());
+                if (released == 0) {
+                    // 锁定值不足：该 SKU 已被释放过（重复取消）或数据异常。
+                    // 只告警、不抛异常 —— 订单状态已是"已关闭"，取消流程应当走完。
+                    LOGGER.warn("释放库存锁定未生效（可能已被释放过）: orderId={}, skuId={}, quantity={}",
+                            orderId, item.getProductSkuId(), item.getProductQuantity());
+                }
+            }
         }
 
         // ⑤ 返还优惠券（use_status 改回0未使用）
