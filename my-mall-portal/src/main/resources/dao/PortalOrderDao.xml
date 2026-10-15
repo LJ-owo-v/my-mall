@@ -69,6 +69,20 @@
           AND stock - lock_stock >= #{quantity}
     </update>
 
+    <!-- ⑦ 原子抢占购物车行（下单幂等 + 顺带完成购物车清理）
+     关键：WHERE 带 delete_status = 0，并发下只有一个请求能把它们置 1。
+     调用方比较 affected 与 ids.size()，不等即说明已被其他请求消费 → 拒绝重复下单。 -->
+    <update id="occupyCartItems">
+        UPDATE oms_cart_item
+        SET delete_status = 1, modify_date = NOW()
+        WHERE member_id = #{memberId}
+        AND delete_status = 0
+        AND id IN
+        <foreach collection="ids" item="id" separator="," open="(" close=")">
+            #{id}
+        </foreach>
+    </update>
+
     <!-- ④ 批量更新订单状态 -->
     <!-- TODO(D10c-幂等): 该 UPDATE 缺 status 条件（应补 AND status = 0）。
          风险：同一订单若被"MQ 消费者 + 定时任务"同时抓到、或定时任务重跑，

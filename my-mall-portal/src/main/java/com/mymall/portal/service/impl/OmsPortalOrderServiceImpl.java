@@ -138,6 +138,23 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
         List<CartPromotionItem> cartPromotionItemList =
                 cartItemService.listPromotion(currentMember.getId(), orderParam.getCartIds());
 
+        // ========== 2.5 【#14 幂等】原子抢占购物车行，防重复提交 ==========
+        // 原理：cartIds 天然就是幂等键。并发重复提交时，只有一个请求能把购物车行
+        //       从 delete_status=0 改成 1，其余请求 affected 不足 → 直接拒绝。
+        // 位置：必须在「锁库存 / 插订单」之前。原实现把删购物车放在第 13 步（最后），
+        //       并发下两个请求都能读到购物车 → 各生成一张订单（实测复现：2 并发出 2 单）。
+        // 回滚：抢不到时 Asserts.fail 抛异常，外层 @Transactional 会把"已抢占的行"一并回滚，
+        //       不会误删购物车，用户可正常重试。
+        List<Long> cartIds = orderParam.getCartIds();
+        if (cartIds == null || cartIds.isEmpty()) {
+            Asserts.fail("请选择要结算的商品！");
+        }
+        int occupied = portalOrderDao.occupyCartItems(currentMember.getId(), cartIds);
+        if (occupied < cartIds.size()) {
+            // 有购物车行已被其他请求消费（或不属于当前会员）→ 重复提交
+            Asserts.fail("订单正在处理中，请勿重复提交");
+        }
+
         for (CartPromotionItem item : cartPromotionItemList) {
             OmsOrderItem orderItem = new OmsOrderItem();
             // 商品基本信息
