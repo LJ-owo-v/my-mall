@@ -53,6 +53,15 @@ public class OmsPromotionServiceImpl implements OmsPromotionService {
             List<OmsCartItem> itemList = entry.getValue();
             PromotionProduct promotionProduct = getPromotionProductById(productId, promotionProductList);
 
+            // ★ 【#3 修复】促销有效期判断：过期的促销按"无优惠"处理。
+            //   原实现只按 promotionType 分发，不判断时间 —— 实测商品 26（华为 P20）
+            //   促销期 2023-01-10~2023-01-31 已过期 3 年多，下单仍给出 89 元优惠。
+            //   语义：startTime/endTime 为 NULL 表示【不限制】，不计为过期。
+            if (!isPromotionInEffect(promotionProduct)) {
+                handleNoReduce(result, itemList, promotionProduct);   // 过期 → 无优惠（静默降级，不提示）
+                continue;
+            }
+
             switch (promotionProduct.getPromotionType()) {
                 case 1:
                     calcSinglePromotion(result, itemList, promotionProduct);  // 单品促销
@@ -69,6 +78,36 @@ public class OmsPromotionServiceImpl implements OmsPromotionService {
             }
         }
         return result;
+    }
+
+    /**
+     * 判断促销是否在有效期内（修复 #3）
+     *
+     * 规则（NULL 表示不限制，不计为过期）：
+     *   · promotionStartTime 不为空且【尚未开始】 → 无效
+     *   · promotionEndTime   不为空且【已经结束】 → 无效
+     *   · 其余情况                                  → 有效
+     *
+     * 注：本方法只做"是否可享优惠"的判断，不影响库存/积分等其它字段的计算
+     *     （过期时走 handleNoReduce，仍会正确设置 realStock、integration、growth）。
+     *
+     * @param promotionProduct 促销商品信息（含促销起止时间）
+     * @return true=促销有效；false=未开始或已过期
+     */
+    private boolean isPromotionInEffect(PromotionProduct promotionProduct) {
+        Date now = new Date();
+
+        Date startTime = promotionProduct.getPromotionStartTime();
+        if (startTime != null && now.before(startTime)) {
+            return false;   // 促销尚未开始
+        }
+
+        Date endTime = promotionProduct.getPromotionEndTime();
+        if (endTime != null && now.after(endTime)) {
+            return false;   // 促销已经结束
+        }
+
+        return true;
     }
 
     /**

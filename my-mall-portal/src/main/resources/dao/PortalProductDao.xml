@@ -47,6 +47,8 @@
             p.id,
             p.`name`,
             p.promotion_type,
+            p.promotion_start_time,
+            p.promotion_end_time,
             p.gift_growth,
             p.gift_point,
             sku.id sku_id,
