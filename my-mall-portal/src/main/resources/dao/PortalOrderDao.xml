@@ -33,6 +33,13 @@
     </select>
 
     <!-- ② 查询超时未支付订单（status=0 且创建时间早于 N 分钟前） -->
+    <!-- ★ 【#10 修复】去掉了原来的 `AND EXISTS (SELECT 1 FROM oms_order_item ...)` 条件：
+         该条件要求订单【必须有明细】才会被兜底扫描到，导致"无明细的订单"永远不会被取消。
+         实测证据：订单 73（创建于 2023-05-11、status=0、明细数=0）超时 1253 天仍未被取消，
+                   带 EXISTS 时查不到（0 条），去掉后能查到（1 条）。
+         安全性：cancelTimeOutOrder 对无明细订单是安全的 ——
+                 释放库存有 isEmpty(itemList) 保护、退券有 couponId==null 保护、
+                 退积分有 useIntegration==null 保护 → 无明细时三个动作全部跳过，仅关单。 -->
     <select id="getTimeOutOrders" resultMap="orderDetailMap">
         SELECT
             o.id, o.order_sn, o.coupon_id, o.integration, o.member_id, o.use_integration,
@@ -42,8 +49,7 @@
         FROM oms_order o
                  LEFT JOIN oms_order_item ot ON o.id = ot.order_id
         WHERE o.status = 0
-          AND o.create_time &lt; date_add(NOW(), INTERVAL -#{minute} MINUTE)
-          AND EXISTS (SELECT 1 FROM oms_order_item t2 WHERE t2.order_id = o.id);
+          AND o.create_time &lt; date_add(NOW(), INTERVAL -#{minute} MINUTE);
     </select>
 
     <!-- ③ 【已由 ⑪ paySkuStockSafely 取代，保留仅为兼容】
