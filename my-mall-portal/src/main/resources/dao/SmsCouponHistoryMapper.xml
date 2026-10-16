@@ -313,6 +313,21 @@
       AND use_status = 1
   </update>
 
+  <!-- 条件核销优惠券（修复 #13）—— 仅当仍为"未使用"时才置为已使用
+       替代 updateCouponStatus 里的"selectByExample 查 use_status=0 → 整行回写"（TOCTOU）。
+       要点：
+         ① WHERE 带 use_status = 0 守卫 → 把「检查」与「更新」合并为一条原子语句；
+         ② 影响行数=0 表示该券已使用（已被核销过）或不存在 → 调用方据此判定；
+         ③ 注意：并发下若两个请求同时进入，只有一个能把 use_status 从 0 改成 1。 -->
+  <update id="useCouponIfUnused">
+    UPDATE sms_coupon_history
+    SET use_status = 1,
+        use_time = NOW()
+    WHERE coupon_id = #{couponId}
+      AND member_id = #{memberId}
+      AND use_status = 0
+  </update>
+
   <!-- 条件插入领取记录（修复 #8 限领绕过）
        仅当「该会员已领取该券的数量 < per_limit」时才插入 —— 把"检查"与"插入"合并为一条语句。
        WHERE 不成立时 SELECT 返回 0 行 → 插入 0 行 → 影响行数=0，调用方据此判定"已领满"。

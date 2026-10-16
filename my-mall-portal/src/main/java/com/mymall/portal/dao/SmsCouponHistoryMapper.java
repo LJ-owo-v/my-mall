@@ -44,4 +44,14 @@ public interface SmsCouponHistoryMapper {
      * @return 受影响行数：1=插入成功；0=已领满（达到 per_limit）
      */
     int insertIfUnderLimit(SmsCouponHistory row);
+
+    /**
+     * 条件核销优惠券（修复 #13）—— 仅当该券仍为"未使用"时才置为已使用。
+     * <p>
+     * 替代原来 updateCouponStatus 里的"selectByExample 查 use_status=0 → 整行回写"（TOCTOU），
+     * 把「检查」与「更新」合并为一条原子语句。
+     *
+     * @return 受影响行数：1=核销成功；0=该券已使用/不存在（说明已被核销过）
+     */
+    int useCouponIfUnused(@Param("couponId") Long couponId, @Param("memberId") Long memberId);
 }

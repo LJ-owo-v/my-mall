@@ -488,4 +488,18 @@
       history_integration = #{historyIntegration,jdbcType=INTEGER}
     where id = #{id,jdbcType=BIGINT}
   </update>
+
+  <!-- 原子扣减会员积分（修复 #13）——带下界守卫
+       替代原来的"读积分 → 应用层算差值 → 整行回写"（无守卫，并发丢失更新：
+       实测同一会员用两个不同购物车行并发下单各扣 300 → 只扣了一次）。
+       要点：
+         ① integration = integration - #{points} 由 DB 侧自减，消除"读到旧值后覆盖"；
+         ② WHERE 带 integration >= #{points} 守卫 → 积分不足时影响行数=0，不会扣成负数；
+         ③ 调用方按影响行数判定，为 0 则抛异常触发整体回滚。 -->
+  <update id="deductIntegrationSafely">
+    UPDATE ums_member
+    SET integration = integration - #{points,jdbcType=INTEGER}
+    WHERE id = #{memberId,jdbcType=BIGINT}
+      AND integration &gt;= #{points,jdbcType=INTEGER}
+  </update>
 </mapper>

@@ -44,6 +44,11 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
     private PmsSkuStockMapper skuStockMapper;
     @Autowired
     private RedisService redisService;
+    // ★ 【#13】积分原子扣减需要直接操作 ums_member（带下界守卫），并清会员缓存
+    @Autowired
+    private UmsMemberMapper memberMapper;
+    @Autowired
+    private UmsMemberCacheService memberCacheService;
     @Value("${redis.key.orderId}")
     private String REDIS_KEY_ORDER_ID;
     @Value("${redis.database}")
@@ -252,9 +257,16 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
 
         if (orderParam.getUseIntegration() == null) {
             order.setIntegration(0);
+            order.setUseIntegration(0);                      // ★ 未用积分也显式置 0
             order.setIntegrationAmount(BigDecimal.ZERO);
         } else {
             order.setIntegration(orderParam.getUseIntegration());
+            // ★ 【#13 附带缺陷修复】use_integration 必须在这里（insert 之前）赋值。
+            //   原实现在第 12 步（orderMapper.insert 之后）才 setUseIntegration，
+            //   导致该字段【永远不落库】（实测两笔订单的 use_integration 均为 NULL）。
+            //   后果：① 订单不记录积分用量；② 取消订单时 `if (getUseIntegration() != null)`
+            //   恒为 false → 【永不退还积分】（用户资损）。
+            order.setUseIntegration(orderParam.getUseIntegration());
             order.setIntegrationAmount(calcIntegrationAmount(orderItemList));  // 积分抵扣
         }
 
@@ -308,14 +320,24 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
         }
 
         // ========== 12. 扣除用户积分 ==========
-        if (orderParam.getUseIntegration() != null) {
-            order.setUseIntegration(orderParam.getUseIntegration());
-            if (currentMember.getIntegration() == null) {
-                currentMember.setIntegration(0);
+        if (orderParam.getUseIntegration() != null && orderParam.getUseIntegration() > 0) {
+            // ★ 【#13 修复】改为带下界守卫的原子扣减。
+            //   原实现：memberService.updateIntegration(id, currentMember.getIntegration() - n)
+            //           → "读积分 → 应用层算差值 → 整行回写"，无任何守卫。
+            //   实测复现：同一会员用【两个不同购物车行】并发下单（各用 300 积分），
+            //             因 #14 抢占的是不同购物车行 → 无法拦住 → 两笔都读到 1000、
+            //             各算 700、后写覆盖先写 → 积分只扣了一次（丢失 300）。
+            //   修复：SET integration = integration - n WHERE id=? AND integration >= n
+            //         · 由 DB 侧自减，消除"读到旧值"；
+            //         · WHERE 守卫保证不会扣成负数；
+            //         · 影响行数=0 → 积分不足，抛异常触发整体回滚。
+            int deducted = memberMapper.deductIntegrationSafely(
+                    currentMember.getId(), orderParam.getUseIntegration());
+            if (deducted == 0) {
+                Asserts.fail("积分不足，无法下单");
             }
-            memberService.updateIntegration(
-                    currentMember.getId(), 
-                    currentMember.getIntegration() - orderParam.getUseIntegration());
+            // 清会员缓存（缓存里存的是旧积分，不删则下次读到过期数据）
+            memberCacheService.delMember(currentMember.getId());
         }
 
         // ========== 13. 删除购物车中已下单商品 ==========
@@ -855,31 +877,24 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
     private void updateCouponStatus(Long couponId, Long memberId, Integer useStatus) {
         if (couponId == null) return;
 
-        // ① 查询当前状态"相反"的领取记录
-        SmsCouponHistoryExample example = new SmsCouponHistoryExample();
-        example.createCriteria()
-                .andMemberIdEqualTo(memberId)
-                .andCouponIdEqualTo(couponId)
-                .andUseStatusEqualTo(useStatus == 0 ? 1 : 0);
-
-        List<SmsCouponHistory> couponHistoryList =
-                couponHistoryMapper.selectByExample(example);
-
-        // ② 找到记录，更新状态
-        if (!CollectionUtils.isEmpty(couponHistoryList)) {
-            SmsCouponHistory couponHistory = couponHistoryList.get(0);
-
-            if (useStatus.equals(1)) {
-                // 下单用券：状态改为已使用，记录使用时间
-                couponHistory.setUseStatus(1);
-                couponHistory.setUseTime(new Date());
-                couponHistoryMapper.updateByPrimaryKeySelective(couponHistory);
-            } else {
-                // 取消返还：状态改回未使用，清空使用时间
-                // 用自定义SQL，因为Selective模式会忽略null、无法清空use_time
-                couponHistoryMapper.releaseCoupon(couponId, memberId);
+        if (useStatus != null && useStatus.equals(1)) {
+            // ★ 【#13 修复】下单用券改为【条件更新】：
+            //   原实现是"selectByExample 查 use_status=0 → 整行回写"（先查后写 TOCTOU），
+            //   并发下两个请求可能都查到 use_status=0 → 都执行更新（重复核销）。
+            //   现合并为一条原子语句：UPDATE ... SET use_status=1 WHERE ... AND use_status=0
+            //   · 影响行数=1 → 核销成功；
+            //   · 影响行数=0 → 该券已使用/不存在（说明已被核销过）→ 不重复核销（静默跳过，
+            //     保持原实现对"查不到记录"时的容错行为，不额外抛异常）。
+            int used = couponHistoryMapper.useCouponIfUnused(couponId, memberId);
+            if (used == 0) {
+                LOGGER.info("优惠券无需核销（已使用或不存在）: couponId={}, memberId={}", couponId, memberId);
             }
+            return;
         }
+
+        // 取消/超时返还：状态改回未使用，清空使用时间。
+        // 原实现（releaseCoupon）本身已是条件更新（WHERE use_status = 1），无需改动。
+        couponHistoryMapper.releaseCoupon(couponId, memberId);
     }
 
 

@@ -93,4 +93,19 @@ public interface UmsMemberMapper {
      * @mbg.generated
      */
     int updateByPrimaryKey(UmsMember row);
+
+    /**
+     * 原子扣减会员积分（修复 #13）—— 带下界守卫。
+     * <p>
+     * 替代原来的"读积分 → 应用层算差值 → 整行回写"（无守卫，并发下丢失更新：
+     * 实测同一会员用两个不同购物车行并发下单各扣 300，结果只扣了一次）。
+     * <p>
+     * {@code SET integration = integration - n WHERE id=? AND integration >= n}
+     * 由 DB 侧自减，消除"读到旧值"；WHERE 守卫保证不会扣成负数。
+     *
+     * @param memberId 会员 id
+     * @param points   要扣减的积分
+     * @return 受影响行数：1=扣减成功；0=积分不足（调用方应抛异常触发回滚）
+     */
+    int deductIntegrationSafely(@Param("memberId") Long memberId, @Param("points") Integer points);
 }
