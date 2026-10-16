@@ -57,18 +57,16 @@ public class OmsPortalOrderController {
         return CommonResult.success(null);
     }
 
-    /**
-     * TODO 后期可能废弃
-     * @param orderId
-     * @return
-     */
-    @Operation(summary = "取消单个超时订单")
-    @RequestMapping(value = "/cancelOrder", method = RequestMethod.POST)
-    @ResponseBody
-    public CommonResult cancelOrder(Long orderId) {
-        portalOrderService.sendDelayMessageCancelOrder(orderId);
-        return CommonResult.success(null);
-    }
+    // ★ 【#17 修复】原 `/cancelOrder` 接口已删除。
+    //   原实现：@RequestMapping("/cancelOrder") → portalOrderService.sendDelayMessageCancelOrder(orderId)
+    //   问题：该接口名为"取消订单"，实际只发一条 MQ 延迟消息（读 normal_order_overtime=120 分钟），
+    //         用户点"取消"后【订单状态不变、库存锁定不释放】，要等 120 分钟消息到期才真正取消。
+    //         实测：调 /cancelOrder → 返回 {"code":200,"message":"操作成功"}（假成功），
+    //               3 秒后 order.status 仍为 0、lock_stock 仍为 1。
+    //   处置：用户确认不需要该接口（其功能已由 /cancelUserOrder 提供），故删除。
+    //         · 真正的"超时自动取消"由 MQ 延迟消息 + OrderTimeOutCancelTask 兜底负责，无需前台接口触发；
+    //         · 用户主动取消请用 POST /cancelUserOrder（内部 cancelOrder 已具备幂等裁决）。
+
     @Operation(summary = "按状态分页获取用户订单列表")
     @Parameter(name = "status", description = "订单状态：-1->全部；0->待付款；1->待发货；2->已发货；3->已完成；4->已关闭",
             in = ParameterIn.QUERY, schema = @Schema(type = "integer",defaultValue = "-1",allowableValues = {"-1","0","1","2","3","4"}))
