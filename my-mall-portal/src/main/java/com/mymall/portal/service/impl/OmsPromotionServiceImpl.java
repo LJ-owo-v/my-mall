@@ -196,16 +196,43 @@ public class OmsPromotionServiceImpl implements OmsPromotionService {
             return;
         }
 
-        for (OmsCartItem item : itemList) {
+        // ★ 【#4 修复】满减分摊：最后一行用「满减总额 − 已分摊额」补齐，保证合计精确等于满减额。
+        //   原实现每行都做 (单价/总价)×满减额，且 divide 未指定 scale（用 totalAmount.scale()）
+        //   → 每行都舍入一次，累计误差随行数放大。
+        //   实测：商品 28（满1000减120）买 649+699+649=1997
+        //         → 0.32×120 + 0.35×120 + 0.32×120 = 118.80，比承诺的 120 少 1.20 元。
+        //
+        //   ★ 关键：totalAmount 是「Σ(单价 × 数量)」（getCartItemAmount 已含数量），
+        //     而 cartPromotionItem.reduceAmount 语义是【每件优惠】（order 汇总时会再乘 quantity）。
+        //     因此本方法按【行小计】(单价×数量) 的比例分摊，再除以数量还原为"每件优惠"。
+        BigDecimal allocated = BigDecimal.ZERO;   // 已分摊累计（行小计口径）
+        int lastIndex = itemList.size() - 1;      // 最后一行的下标
+
+        for (int i = 0; i <= lastIndex; i++) {
+            OmsCartItem item = itemList.get(i);
             CartPromotionItem cartPromotionItem = new CartPromotionItem();
             BeanUtils.copyProperties(item, cartPromotionItem);
             cartPromotionItem.setPromotionMessage(getFullReductionPromotionMessage(fullReduction));
 
             PmsSkuStock skuStock = getOriginalPrice(promotionProduct, item.getProductSkuId());
             BigDecimal originalPrice = skuStock.getPrice();
-            // 每件优惠 = (单件原价 / 总价) × 满减金额
-            BigDecimal reduceAmount = originalPrice.divide(totalAmount, RoundingMode.HALF_EVEN)
-                    .multiply(fullReduction.getReducePrice());
+            int quantity = item.getQuantity() == null || item.getQuantity() <= 0 ? 1 : item.getQuantity();
+            BigDecimal quantityDec = new BigDecimal(quantity);
+
+            BigDecimal rowReduce;   // 本行分摊到的满减总额（行小计口径）
+            if (i == lastIndex) {
+                // ★ 最后一行：用减法补齐，吸收前面所有舍入误差 → 行合计必然精确等于满减额
+                rowReduce = fullReduction.getReducePrice().subtract(allocated);
+            } else {
+                // 其余行：按【行小计】比例分摊（scale 显式取 4 位，减少单行舍入误差）
+                BigDecimal rowAmount = originalPrice.multiply(quantityDec);
+                BigDecimal ratio = rowAmount.divide(totalAmount, 4, RoundingMode.HALF_EVEN);
+                rowReduce = ratio.multiply(fullReduction.getReducePrice());
+                allocated = allocated.add(rowReduce);
+            }
+
+            // 还原为「每件优惠」：行小计 ÷ 数量（保持与字段语义一致，order 汇总时会再乘 quantity）
+            BigDecimal reduceAmount = rowReduce.divide(quantityDec, 4, RoundingMode.HALF_EVEN);
 
             cartPromotionItem.setReduceAmount(reduceAmount);
             cartPromotionItem.setRealStock(skuStock.getStock() - skuStock.getLockStock());
