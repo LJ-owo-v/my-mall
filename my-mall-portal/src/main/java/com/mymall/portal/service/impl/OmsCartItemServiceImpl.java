@@ -3,11 +3,16 @@ package com.mymall.portal.service.impl;
 import com.mymall.portal.domain.CartProduct;
 
 import cn.hutool.core.collection.CollUtil;
+import com.mymall.common.exception.Asserts;
 import com.mymall.portal.dao.OmsCartItemMapper;
+import com.mymall.portal.dao.PmsProductMapper;
+import com.mymall.portal.dao.PmsSkuStockMapper;
 import com.mymall.portal.dao.PortalProductDao;
 import com.mymall.portal.domain.CartPromotionItem;
 import com.mymall.portal.model.OmsCartItem;
 import com.mymall.portal.model.OmsCartItemExample;
+import com.mymall.portal.model.PmsProduct;
+import com.mymall.portal.model.PmsSkuStock;
 import com.mymall.portal.model.UmsMember;
 import com.mymall.portal.service.OmsCartItemService;
 import com.mymall.portal.service.OmsPromotionService;
@@ -32,6 +37,12 @@ public class OmsCartItemServiceImpl implements OmsCartItemService {
     private OmsPromotionService promotionService;
     @Autowired
     private PortalProductDao productDao;
+    // ★ 【#20】加购时按 skuId 回查，服务端定价 + 补全商品信息
+    @Autowired
+    private PmsSkuStockMapper skuStockMapper;
+    @Autowired
+    private PmsProductMapper productMapper;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int add(OmsCartItem cartItem) {
@@ -39,6 +50,45 @@ public class OmsCartItemServiceImpl implements OmsCartItemService {
 
         // ① 获取当前登录会员
         UmsMember currentMember = memberService.getCurrentMember();
+
+        // ★ 【#20 修复】按 productSkuId 回查 SKU 与商品，服务端补全/覆盖关键字段。
+        //
+        // 修复前的缺陷（实测确认，前面所有优化都拦不住）：
+        //   ① 漏传 productId → getCartItem 用 product_id = null 查询 → 加购直接 HTTP 500；
+        //   ② 漏传 price    → oms_cart_item.price = NULL → 下单 calcCartAmount 里
+        //                     item.getPrice().multiply(...) → NPE → HTTP 500；
+        //   ③ 传错价（如 0.01）→ 后端原样落库 → 用户可按错误价格下单（资损风险）；
+        //   ④ 不传商品信息  → product_name/product_pic 为 NULL → 订单明细空白。
+        //
+        // 修复思路（对齐主流做法"风格 A"）：价格是服务端资产，客户端只能"看"不能"说"。
+        //   加购只应传 productSkuId + quantity，其余字段一律由服务端按 skuId 回查填充，
+        //   前端传来的 price/productName 等【一律忽略并覆盖】。
+        //
+        // 注：老项目 mall-swarm 的 add() 同样不查 SKU（信任前端传价），属继承的既有缺陷；
+        //     此处属【有意的行为变更】（安全加固），需在台账登记。
+        if (cartItem.getProductSkuId() == null) {
+            Asserts.fail("请选择商品规格");
+        }
+        PmsSkuStock skuStock = skuStockMapper.selectByPrimaryKey(cartItem.getProductSkuId());
+        if (skuStock == null) {
+            Asserts.fail("商品规格不存在，请重新选择");
+        }
+        // 服务端定价：覆盖前端传入的任何价格
+        cartItem.setProductId(skuStock.getProductId());
+        cartItem.setPrice(skuStock.getPrice());
+        cartItem.setProductSkuCode(skuStock.getSkuCode());
+
+        // 补全商品信息（名称/图片/分类/品牌/货号），避免订单明细出现空白字段
+        PmsProduct product = productMapper.selectByPrimaryKey(skuStock.getProductId());
+        if (product != null) {
+            cartItem.setProductName(product.getName());
+            // SKU 有独立图片时优先用 SKU 的，否则回退到商品主图
+            cartItem.setProductPic(skuStock.getPic() != null ? skuStock.getPic() : product.getPic());
+            cartItem.setProductSubTitle(product.getSubTitle());
+            cartItem.setProductSn(product.getProductSn());
+            cartItem.setProductBrand(product.getBrandName());
+            cartItem.setProductCategoryId(product.getProductCategoryId());
+        }
 
         // ② 填充会员信息
         cartItem.setMemberId(currentMember.getId());
