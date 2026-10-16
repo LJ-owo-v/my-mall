@@ -2,7 +2,7 @@ package com.mymall.gateway.probe;
 
 import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
-import com.macro.mall.common.dto.UserDto;
+import com.mymall.common.dto.UserDto;
 import com.mymall.common.redis.MyMallBaseRedisConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +57,7 @@ public class RedisContractProbe implements ApplicationRunner {
                         dto.getPermissionList() == null ? 0 : dto.getPermissionList().size());
             }
         } catch (Exception e) {
-            log.error("[契约自检] Sa-Token 会话读取失败（多半是缺少兼容类 com.macro.mall.common.dto.UserDto）", e);
+            log.error("[契约自检] Sa-Token 会话读取失败（若 Redis 仍残留 com.macro 旧会话，请删除 Authorization:*:session:* 后重新登录）", e);
         }
     }
 }

@@ -6,7 +6,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.BCrypt;
 import com.github.pagehelper.PageHelper;
-import com.macro.mall.common.dto.UserDto;
+import com.mymall.common.dto.UserDto;
 import com.mymall.common.constant.AuthConstant;
 import com.mymall.common.exception.Asserts;
 import com.mymall.user.dao.UmsAdminLoginLogMapper;
@@ -128,7 +128,7 @@ public  class UmsAdminServiceImpl implements UmsAdminService {
         StpUtil.login(admin.getId());
 
         // ⑥ 组装 UserDto 并存入 Session
-        //    UserDto 是网关鉴权时读取的核心对象，包名必须是 com.macro.mall.common.dto.UserDto
+        //    UserDto 是网关鉴权时读取的核心对象，包名必须是 com.mymall.common.dto.UserDto
         UserDto userDto = new UserDto();
         userDto.setId(admin.getId());
         userDto.setUsername(admin.getUsername());

@@ -2,7 +2,7 @@ package com.mymall.gateway.component;
 
 import cn.dev33.satoken.stp.StpInterface;
 import cn.dev33.satoken.stp.StpUtil;
-import com.macro.mall.common.dto.UserDto;
+import com.mymall.common.dto.UserDto;
 import com.mymall.gateway.config.SaTokenConfig;
 import org.springframework.stereotype.Component;
 

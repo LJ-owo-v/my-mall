@@ -1,6 +1,6 @@
 package com.mymall.portal.service.impl;
 
-import com.macro.mall.common.dto.UserDto;
+import com.mymall.common.dto.UserDto;
 
 
 import cn.dev33.satoken.stp.SaTokenInfo;

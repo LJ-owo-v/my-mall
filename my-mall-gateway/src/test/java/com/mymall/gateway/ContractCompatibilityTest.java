@@ -3,7 +3,7 @@ package com.mymall.gateway;
 import cn.dev33.satoken.dao.SaTokenDao;
 import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
-import com.macro.mall.common.dto.UserDto;
+import com.mymall.common.dto.UserDto;
 import com.mymall.common.redis.MyMallBaseRedisConfig;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   ① Redis 序列化：用我们的 RedisTemplate 能读出 mall-admin 写的 auth:pathResourceMap
  *   ② Sa-Token 自动装配：Redis DAO 被正确装配（前提是存在 RedisTemplate<String,Object> Bean）
  *   ③ key 前缀：token-name=Authorization → 能定位 Authorization:login:session:{loginId}
- *   ④ 兼容类：session 里的 adminInfo 能还原成 com.macro.mall.common.dto.UserDto 并拿到权限列表
+ *   ④ 兼容类：session 里的 adminInfo 能还原成 com.mymall.common.dto.UserDto 并拿到权限列表
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -83,7 +83,7 @@ class ContractCompatibilityTest {
         System.out.println("[验证④] adminInfo 实际类型 = "
                 + (adminInfo == null ? "null" : adminInfo.getClass().getName()));
         assertThat(adminInfo)
-                .as("必须还原成兼容类 UserDto（包名必须是 com.macro.mall.common.dto，否则 default typing 会找不到类）")
+                .as("必须能还原成 UserDto（包名已改为 com.mymall.common.dto —— 老服务的 com.macro 会话已清理）")
                 .isInstanceOf(UserDto.class);
 
         UserDto dto = (UserDto) adminInfo;
