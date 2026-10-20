@@ -1,0 +1,41 @@
+================================================================
+M5 #16 支付回调幂等 —— 复现（修复前）与验证（修复后）证据
+时间：2026-10-15 16:47:10
+================================================================
+
+【问题】支付宝会重复投递同一回调（返回 failure 或响应超时即按策略重试，最长 24h），
+  /alipay/query 兜底也会重复调用。paySuccess 是【无条件写操作】：
+    ① orderMapper.updateByPrimaryKeySelective 无 status=0 条件 → 每次都改单
+    ② updateSkuStock 无任何下界保护 → 每次都扣 stock 与 lock_stock
+
+【复现（修复前，实测）】POST /order/paySuccess 连调 3 次（同一订单，串行，无需并发）：
+  下单后      : stock=5  lock_stock=1  status=0
+  第 1 次调用 : stock=4  lock_stock=0  status=1  data:1   ← 正常
+  第 2 次调用 : stock=3  lock_stock=-1 status=1  data:1   ← 又扣一次，锁定变负
+  第 3 次调用 : stock=2  lock_stock=-2 status=1  data:1   ← 再扣一次，仍返回'支付成功'
+  ★ 必现：不需要并发、不需要攻击，串行重复调用即触发
+
+【修复】
+  新增 PortalOrderDao.payOrderIfPending：
+    UPDATE oms_order SET status=1, payment_time=NOW(), pay_type=#{payType}
+    WHERE id=#{orderId} AND status=0          ← 原子裁决
+  新增 paySkuStockSafely：
+    UPDATE pms_sku_stock SET stock=stock-?, lock_stock=lock_stock-?
+    WHERE id=? AND lock_stock>=? AND stock>=?  ← 双下界保护
+  paySuccess 改为：affected=0 → 记日志并 return 0（不扣库存）；再逐 SKU 安全扣减
+  旧 updateSkuStock 保留并标注'已由 paySkuStockSafely 取代，保留仅为兼容'
+
+【验证（修复后，全 PASS）】
+  P1 重复支付幂等（连调 3 次）：
+     第 1 次: stock=4 lock=0 status=1 data:1 payment_time 有值   ✅
+     第 2 次: stock=4 lock=0 status=1 data:0 【无变化】          ✅
+     第 3 次: stock=4 lock=0 status=1 data:0 【无变化】          ✅
+     payment_time 始终未被覆盖，证明第 2/3 次根本没有执行 UPDATE
+  P2 正常支付不受影响：stock 5→4、lock 1→0、status=1、payment_time/pay_type 正确   ✅
+  P3 下界保护（SQL 层，必现对照）：
+     lock=0 时扣减 → 影响行数 0、值不变      ✅
+     stock=0 时扣减 → 影响行数 0、值不变      ✅
+     正常（lock=1,stock=100）→ 影响行数 1、正确扣减   ✅
+  P4 已取消订单收到支付回调：返回 data:0、订单保持 status=4、库存未被扣减   ✅
+     （修复前此场景会扣库存并把订单错误地改为已支付）
+  P6 全库盘点：负锁定 0、负库存 0   ✅

@@ -1,0 +1,17 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-8,text,true,,490,241,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-2,text,true,,490,241,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-7,text,true,,490,241,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-1,text,true,,490,240,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-5,text,true,,490,242,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-3,text,true,,490,244,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-4,text,true,,490,240,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259590,175,01 会员登录 /sso/login,200,,超发复现线程组 1-6,text,true,,490,240,8,8,http://127.0.0.1:8092/sso/login,175,0,28
+1792066259797,19,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-4,text,true,,256,404,8,8,http://127.0.0.1:8092/member/coupon/add/30,19,0,0
+1792066259797,24,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-6,text,true,,256,404,7,7,http://127.0.0.1:8092/member/coupon/add/30,23,0,0
+1792066259797,24,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-8,text,true,,277,404,7,7,http://127.0.0.1:8092/member/coupon/add/30,24,0,0
+1792066259797,25,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-5,text,true,,277,404,6,6,http://127.0.0.1:8092/member/coupon/add/30,25,0,0
+1792066259797,25,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-3,text,true,,277,404,6,6,http://127.0.0.1:8092/member/coupon/add/30,25,0,0
+1792066259797,26,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-2,text,true,,277,404,3,3,http://127.0.0.1:8092/member/coupon/add/30,26,0,0
+1792066259797,28,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-7,text,true,,277,404,2,2,http://127.0.0.1:8092/member/coupon/add/30,28,0,0
+1792066259797,29,03 领取优惠券 /member/coupon/add/{couponId},200,,超发复现线程组 1-1,text,true,,277,404,1,1,http://127.0.0.1:8092/member/coupon/add/30,28,0,0

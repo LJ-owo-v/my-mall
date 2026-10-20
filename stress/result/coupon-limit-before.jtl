@@ -1,0 +1,17 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-7,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-8,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-1,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-5,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-4,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-6,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-3,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762427,188,01 会员登录 /sso/login,200,,限领绕过线程组 1-2,text,true,,491,242,8,8,http://127.0.0.1:8092/sso/login,184,0,30
+1792065762650,17,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-7,text,true,,256,405,8,8,http://127.0.0.1:8092/member/coupon/add/29,17,0,0
+1792065762650,19,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-6,text,true,,256,405,8,8,http://127.0.0.1:8092/member/coupon/add/29,18,0,0
+1792065762650,20,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-4,text,true,,256,405,6,6,http://127.0.0.1:8092/member/coupon/add/29,20,0,0
+1792065762650,22,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-8,text,true,,256,405,5,5,http://127.0.0.1:8092/member/coupon/add/29,22,0,0
+1792065762650,23,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-2,text,true,,256,405,5,5,http://127.0.0.1:8092/member/coupon/add/29,23,0,0
+1792065762650,26,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-1,text,true,,256,405,3,3,http://127.0.0.1:8092/member/coupon/add/29,26,0,0
+1792065762650,28,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-3,text,true,,274,405,2,2,http://127.0.0.1:8092/member/coupon/add/29,28,0,0
+1792065762650,32,03 领取优惠券 /member/coupon/add/{couponId},200,,限领绕过线程组 1-5,text,true,,274,405,1,1,http://127.0.0.1:8092/member/coupon/add/29,32,0,0

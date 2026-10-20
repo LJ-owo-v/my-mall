@@ -1,0 +1,35 @@
+================================================================
+M5 #15-A 取消幂等（重复释放库存）—— 修复与验证证据
+时间：2026-10-15 15:52:34
+================================================================
+
+【问题】同一订单被取消两次 → 库存/券/积分被重复退还
+  代码缺陷（审计得出，非压测复现）：
+    ① releaseSkuStockLock 无下界保护：UPDATE ... SET lock_stock = lock_stock - ? 无 AND lock_stock >= ?
+    ② cancelOrder 先查后写（TOCTOU）：SELECT 带 status=0 → 判断 → UPDATE 无 status 条件
+    ③ cancelTimeOutOrder 批量 UPDATE 无 status 条件，无法定位'我真正关掉了哪些'
+  既成事实（修复前库中实存）：3 个 SKU 的 lock_stock 为负（sku98=-24, sku103=-8, sku106=-8）
+  ⚠ 并发竞态窗口为毫秒级，15+5 轮压测未能稳定复现（如实记录：无并发复现证据）
+
+【修复】
+  新增 releaseSkuStockLockSafely：SET lock_stock = lock_stock - ? WHERE id = ? AND lock_stock >= ?
+  新增 updateOrderStatusByIdIfPending：UPDATE oms_order SET status = ? WHERE id = ? AND status = 0
+  cancelOrder / cancelTimeOutOrder 改为：先原子裁决(affected=1 才有权释放) → 再逐 SKU 安全释放
+  旧方法 releaseSkuStockLock 保留并标注'已由 ...Safely 取代，保留仅为兼容'
+
+【验证结果（全部 PASS）】
+  V1 下界保护（SQL 层，必现对照）：
+     lock_stock=0 时无守卫 UPDATE → 变成 -1   【修复前的成因】
+     lock_stock=0 时带守卫 UPDATE → 影响行数 0，保持 0   ✅
+     lock_stock=1 时带守卫 UPDATE → 影响行数 1，变成 0   ✅ 正常释放
+  V2 正常取消一次：lock_stock 1→0、订单 status=4   ✅
+  V3 重复取消 3 次：lock_stock 保持 0（修复前会变 -1/-2/-3）   ✅
+  V4 定时任务批量取消（3 张）：一次性全部关闭、lock_stock 3→0；
+     再调用 2 次（模拟重跑）无任何变化   ✅
+     日志证据：updateOrderStatusByIdIfPending Updates:1 → releaseSkuStockLockSafely Updates:1，无异常无回滚
+  V5 全库负锁定盘点：0   ✅
+
+【测试方法论教训（重要）】
+  normal_order_overtime=0 时，getTimeOutOrders 的条件是 create_time < NOW()，
+  而 create_time 精度为【秒】—— 刚创建的订单在同一秒内不满足 '<'，会被漏掉。
+  首次测试'只处理 1 张'即此原因（非代码缺陷）。正确做法：造数后【等 2 秒】再触发。

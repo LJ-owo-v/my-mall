@@ -1,0 +1,101 @@
+================================================================
+M5 阶段四 #20 加购不补全价格 → 下单 NPE 500 —— 修复与验证证据
+时间：2026-10-16 14:47:15
+================================================================
+
+【核实：前面所有优化都拦不住 #20（实测确认）】
+
+  对比实验（修复前）：
+    实验A 只传 productSkuId+quantity        → 加购 HTTP 500（未落库）
+    实验B 传 productId+productSkuId+quantity（不传 price）
+           → 加购 200，但 oms_cart_item.price = NULL、product_name = NULL
+           → 下单 POST /order/generateConfirmOrder → HTTP 500
+
+  为什么前面的优化都拦不住：
+    · #9 锁库存   —— 无关（还没走到锁库存）
+    · #14 下单幂等 —— 无关（第一次下单就 500）
+    · #4 满减分摊 —— 无关（price=null 时先 NPE，到不了分摊）
+    · #16 金额校验 —— 无关（支付回调阶段才校验）
+    · #13 积分/券 —— 无关
+    · #12 对账    —— 只能事后发现，不能阻止
+    根本原因：前面所有保护都在【下单流程中后段】，而 price=NULL 是【加购阶段】引入的，
+              NPE 发生在计算金额时（calcCartAmount）—— 在所有这些保护之前。
+
+【#20 的真实问题清单（实测，共 4 个）】
+
+  ① 漏传 productId → getCartItem 用 product_id=null 查询 → 【加购直接 500】
+     （文档只提到"下单 500"，实测发现加购本身就 500）
+  ② 漏传 price   → price=NULL → 下单 calcCartAmount 里
+                    item.getPrice().multiply(...) → NPE → 【HTTP 500】
+  ③ 传错价（如 0.01）→ 后端原样落库 → 【用户可按错误价格下单】（资损风险）
+     ★ 这个 #16 的金额校验也拦不住：订单金额就是从 0.01 算出来的，
+       支付回调金额也是 0.01，两者一致 → 校验通过。
+  ④ 不传商品信息 → product_name/product_pic 为 NULL → 订单明细空白
+
+【主流的规避方式（本次对齐"风格 A"）】
+
+  核心原则：价格是服务端资产，客户端只能"看"不能"说"。
+           前端传来的任何金额字段都只用于展示/比对，绝不参与计算。
+
+  分层做法：
+    ① 加购层   只收 skuId + quantity，服务端按 skuId 查价回填
+    ② 结算层   服务端重新读价 + 重算优惠
+    ③ 下单层   只传 cartIds（我们项目 OrderParam 只有 5 个字段、无 price ✅ 已符合）
+    ④ 支付层   校验回调金额 == 订单金额（#16 已做 ✅）
+
+  → 我们的下单链路【已经符合主流】，唯一缺口是【加购入口直接接收实体】
+    public CommonResult add(@RequestBody OmsCartItem cartItem)  ← 含 price，且原样落库
+
+  三种入参风格：
+    A. 只传标识 {"skuId":201,"qty":2}                    ← 本次对齐（最主流）
+    B. 传标识+展示价（展示价仅用于比对，不参与计算）
+    C. 传成交金额 {"skuId":201,"price":5999}             ← 反模式（我们修复前的状态）
+
+【修复（OmsCartItemServiceImpl.add）】
+
+  在获取会员之后、落库之前，按 productSkuId 回查 SKU 与商品：
+    if (cartItem.getProductSkuId() == null) Asserts.fail("请选择商品规格");
+    PmsSkuStock skuStock = skuStockMapper.selectByPrimaryKey(cartItem.getProductSkuId());
+    if (skuStock == null) Asserts.fail("商品规格不存在，请重新选择");
+
+    // 服务端定价：覆盖前端传入的任何价格
+    cartItem.setProductId(skuStock.getProductId());     // 补 productId（解决 ①）
+    cartItem.setPrice(skuStock.getPrice());             // 真实价覆盖（解决 ②③）
+    cartItem.setProductSkuCode(skuStock.getSkuCode());
+
+    // 补全商品信息（解决 ④）
+    PmsProduct product = productMapper.selectByPrimaryKey(skuStock.getProductId());
+    if (product != null) {
+        setProductName / setProductPic(SKU图优先，回退商品主图) / setProductSubTitle
+        / setProductSn / setProductBrand / setProductCategoryId
+    }
+
+  新增注入：PmsSkuStockMapper、PmsProductMapper
+
+  ⚠️ 有意的行为变更：老项目 mall-swarm 的 add() 同样信任前端传价（继承的既有缺陷）；
+     本次改为【服务端定价】，前端传的 price/productName 一律忽略并覆盖 → 需台账登记。
+
+【验证（全 PASS）】
+
+  V1 只传 productSkuId+quantity（修复前加购 500）
+     → HTTP 200；落库 product_id=37（前端没传，服务端反查）、
+       price=5999.00、product_name/product_pic 全部补全        ✅
+
+  V2 传 productId 不传 price（修复前 price=NULL → 下单 500）
+     → 加购 200、落库 price=5999.00 → 确认单 HTTP 200          ✅
+
+  V3 ★ 传错价 price=0.01 + 假商品名（修复前原样落库 → 资损）
+     → 落库 price=5999.00（0.01 被覆盖）、商品名也未被采用       ✅
+
+  V4 SKU 不存在 / 不传 SKU
+     → {"code":500,"message":"商品规格不存在，请重新选择"}
+       {"code":500,"message":"请选择商品规格"}                  ✅ 可读业务错误（非裸 500 页面）
+
+  V5 商品信息补全          → 名称/图片/分类/品牌/货号全部补全    ✅
+
+  V6 全链路回归            → 加购→确认单(5999.00)→下单(订单199)→支付(status=1) 全 200 ✅
+
+  V7 重复加购同 SKU        → 累加为一行、数量 2+3=5              ✅
+
+【数据清理】
+  测试订单/购物车已删；SKU 201 库存复位 500/0；会员13 积分复位 3900；负锁定 0。

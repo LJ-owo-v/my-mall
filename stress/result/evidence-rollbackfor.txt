@@ -1,0 +1,76 @@
+================================================================
+M5 #15-B 事务可靠性（rollbackFor）—— 修复与验证证据
+时间：2026-10-15 19:47:18
+================================================================
+
+【问题】
+  Spring 的 @Transactional 默认只对 RuntimeException 回滚，
+  受检异常（Exception / SQLException / IOException 等）【不回滚但仍提交】。
+
+  而取消链路是「关单 → 释放库存 → 退券 → 退积分」顺序执行的：
+  若中间抛出受检异常，事务照常提交 → 留下
+  「库存已释放、券已退、但订单还是待付款」这类半成品状态。
+
+  核实：全项目 @Transactional 共 24 处，【没有一处】声明 rollbackFor，
+        即全部使用上述默认行为。
+
+【方案变更（重要）】
+  原计划做"全局默认 rollbackFor 配置"，实现时发现【不可行】并撤回：
+    ① 自定义 TransactionInterceptor Bean
+       → 与 Spring Boot 自动配置的同类型 Bean 冲突
+       → BeanFactoryTransactionAttributeSourceAdvisor 注入时有 2 个候选 → 启动失败
+    ② 自定义 TransactionAttributeSource Bean
+       → ProxyTransactionManagementConfiguration.transactionAttributeSource() 是无条件 @Bean，不让位
+    ③ TransactionManagementConfigurer 扩展点
+       → 只能提供 transactionManager，不能提供 attributeSource
+  ★ 结论：Spring 未提供"全局默认 rollbackFor"的官方扩展点（已知设计缺口）。
+
+  改用【批量补齐】：效果等同全局配置，零风险，且显式可读。
+    · 显式声明（谁的事务回滚范围是什么，一眼可见）
+    · 无 Bean 冲突
+    · 符合项目「配置放服务本地」的惯例
+
+【修复】
+  ① 显式声明（2 处，取消链路）：
+       cancelOrder / cancelTimeOutOrder → @Transactional(rollbackFor = Exception.class)
+       并加注释说明原因
+  ② 批量补齐（22 处，覆盖 4 个服务 / 10 个文件）：
+       my-mall-portal      6 处
+       my-mall-product     8 处
+       my-mall-order       5 处
+       my-mall-marketing   3 处
+  合计 24 处已配，裸 @Transactional = 0 处
+
+【验证 ★ A/B 对照（决定性证据）】
+  临时探针（验证后已删除）做同代码、同异常类型的对照实验：
+    同一份代码、同一个异常类型（受检 Exception）、同一时刻，唯一变量是注解。
+
+    探针A[带 rollbackFor + 受检异常] SKU112: 0 -> 0  => ★ 已回滚（修复生效）
+    探针B[裸 @Transactional + 受检异常] SKU113: 0 -> 1  => ★ 未回滚但已提交（修复前的行为）
+
+  这一次对照同时证明两件事：
+    ① 修复前的问题【真实存在】—— B 组：受检异常 → 写入被提交（0→1）
+    ② 修复后的问题【已解决】  —— A 组：同样的异常 → 写入被回滚（0→0）
+
+  ★ 日志显示 A 组的 SQL 确实执行了（lockStockSafely Updates: 1），
+    说明是"写了又被回滚"，这才是真正的回滚证明（而非"没写"）。
+
+【回归验证（6 项全 PASS，确认前四项修复未受影响）】
+  R1 #9  库存守卫    ：可售 0 时下单 → {"code":500,"message":"库存不足，无法下单"}   PASS
+  R2 #14 下单幂等    ：同一购物车下单两次 → 第 2 次"订单正在处理中，请勿重复提交"，订单数=1  PASS
+  R3 #15-A 取消幂等  ：重复取消 3 次 → lock_stock 保持 0                          PASS
+  R4 #16 支付幂等    ：连调 3 次 → 第 1 次 data:1、第 2/3 次 data:0，库存停在 4/0    PASS
+  R5 #12 对账        ：回到基线（I1/I5 只剩已知 SKU 201；I2/I3/I4 全 PASS）        PASS
+  R6 端到端流程      ：下单→取消（5/1→5/0, status=4）；下单→支付（4/0, status=1）   PASS
+
+【探针清理（已彻底移除）】
+  · 删除 TransactionRollbackProbe.java（整个文件）
+  · 移除 PortalOrderDao.getLockStock（方法 + XML 语句）
+  · 删除探针造的测试数据 SKU 113；SKU 112 复位 500/0
+  · 确认无残留引用，4 个服务编译通过
+
+【遗留（本次不做，已登记）】
+  #15-B 的缺陷②「无重试机制」未做 —— 释放动作失败后没有重试；
+  定时任务因 getTimeOutOrders 带 status=0 过滤，订单一旦关闭就再也捞不到 → 失败即永久失败。
+  若要彻底解决需上"状态机 + 补偿"（改动较大）。
+  ★ 原 B 的"批处理事务粒度过粗"已随 #15-A 的逐单原子裁决改造【顺带解决】。

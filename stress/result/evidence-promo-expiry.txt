@@ -1,0 +1,62 @@
+================================================================
+M5 阶段二 #3 促销过期判断不严谨 —— 修复与验证证据
+时间：2026-10-16 11:18:51
+================================================================
+
+【问题】
+  getPromotionProductList 只按 p.id IN (...) 过滤，【无任何时间条件】；
+  calcCartPromotion 只按 promotionType 分发，【不判时间】。
+  → 促销过期后，用户下单仍享受促销价。
+
+【复现（修复前，实测）】
+  商品 26 华为 HUAWEI P20：
+    促销期 = 2023-01-10 ~ 2023-01-31
+    当前   = 2026-10-16（已过期约 3 年 8 个月）
+    调 generateConfirmOrder（加购 1 件 SKU 110，原价 3788）
+    → promotionMessage = "单品促销"
+    → reduceAmount     = 89.00        ★ 过期促销仍在生效
+    → promotionAmount  = 89.00
+    → 用户按 3699 元成交（正是 2023 年促销期的价格）
+
+  库里影响范围（7 个有促销的商品中 3 个已过期）：
+    26 华为 P20      单品  2023-01-10~2023-01-31   已过期 3.7 年
+    29 iPhone 8 Plus 单品  2020-05-04~2020-05-30   已过期 6.4 年
+    45 OPPO Reno8    满减  2022-11-09~2022-11-25   已过期 3.9 年
+
+  老项目核对：mall-swarm 的 PortalProductDao.xml 【完全相同】（同样无时间条件）
+  → 属"照抄老项目"继承的既有缺陷，非迁移遗漏。
+
+【修复（Service 层判断，不提示）】
+  ① PortalProductDao.xml：getPromotionProductList 的 SELECT 补查
+       p.promotion_start_time, p.promotion_end_time
+     （PromotionProduct extends PmsProduct，字段已存在，但原 SQL 未查 → 值为 null）
+  ② OmsPromotionServiceImpl：
+     新增 isPromotionInEffect(promotionProduct)：
+       · startTime 非空且尚未开始 → false
+       · endTime   非空且已结束   → false
+       · 其余                     → true（★ NULL 表示不限制，不计为过期）
+     在 calcCartPromotion 的类型分发【之前】判断：
+       过期 → handleNoReduce(...) 静默降级为"无优惠"，continue
+     选 handleNoReduce 而非直接跳过：它会正确设置 realStock/integration/growth，
+     只把优惠金额置 0 → 过期商品【仍能正常下单】，不会因促销过期而买不了。
+
+【验证（全 PASS）】
+  E1 过期商品降级（核心）：
+     商品 26（结束 2023-01-31）：无优惠  reduceAmount=0  total=3788.00   PASS
+     商品 29（结束 2020-05-30）：无优惠  reduceAmount=0  total=5499.00   PASS
+     商品 45（结束 2022-11-25）：无优惠  reduceAmount=0  total=2299.00   PASS
+  E3 无时间限制的促销（NULL ≠ 过期，不能误伤）：
+     商品 28（满减，NULL）：满减优惠：满500减50   reduceAmount=50      PASS
+     商品 40（满减，NULL）：满减优惠：满2000减200 reduceAmount=200     PASS
+  E3-b 无时间限制的阶梯促销（买够件数才生效）：
+     商品 27（阶梯，NULL）：买 2 件 → "打折优惠：满2件，打8.00折" reduceAmount=539.80  PASS
+  E4 有效期内促销（临时把商品 26 结束时间改到 2027）：
+     → promotionMessage="单品促销" reduceAmount=89.00   PASS（未误伤有效促销）
+  （E4 验证后已将商品 26 的促销时间还原为 2023-01-31）
+
+【一次"假警报"的澄清（方法论）】
+  E3 首测时商品 27 显示"无优惠"，一度标为"误伤"。
+  查证后发现是【业务本来如此】：商品 27 的阶梯规则是"满 2 件打 8 折"，
+  而首测只加了【1 件】→ 不满足门槛 → 本就没有优惠。
+  改用"买 2 件"重测 → 正常打折。
+  ★ 教训：看到"异常"先查证再下结论，不要急着判定代码有问题。

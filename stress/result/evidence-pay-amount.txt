@@ -1,0 +1,46 @@
+================================================================
+M5 #16 支付回调金额校验 + query 判空 —— 修复与验证证据
+时间：2026-10-15 16:56:53
+================================================================
+
+【问题① 金额未校验（资损缺口）】
+  notify 验签后只看 trade_status == TRADE_SUCCESS 就直接 paySuccessByOrderSn(out_trade_no, 1)，
+  从不读取回调的 total_amount —— 理论上可用 0.01 元的支付结掉 3699 元的订单。
+  ★ 额外发现：query 兜底分支【同样】直接调 paySuccessByOrderSn，只修 notify 会被绕过。
+
+【问题② query() 空指针】
+  alipayClient.execute() 抛 AlipayApiException 时 response 保持 null，
+  随后 response.isSuccess() 与 response.getTradeStatus() 两处 NPE
+  —— 恰好发生在最需要兜底的时刻（支付宝接口异常）。
+
+【修复】
+  新增 OmsPortalOrderService.checkOrderAmount(orderSn, totalAmount)：
+    - 订单号/金额为空 → false 并 warn
+    - 订单不存在 / pay_amount 为空 → false 并 warn
+    - new BigDecimal(totalAmount) 抛 NumberFormatException → catch 后 false（不让异常冒泡）
+    - 用 BigDecimal.compareTo 比对（★ 必须 compareTo 而非 equals，避免 scale 差异误判）
+    - 不一致 → log.error('★ 支付回调金额与订单不符，拒绝处理！') 并 false
+  AlipayServiceImpl.notify：验签通过后【先校验金额】，不一致直接 return 'failure'（不改单）；
+    日志补充 out_trade_no 与 total_amount 便于对账留痕
+  AlipayServiceImpl.query：
+    ① response == null 判空 → log.error 并 return null（修 NPE）
+    ② TRADE_SUCCESS 分支也调 checkOrderAmount（金额取自 response.getTotalAmount()）
+
+【验证（全部 PASS）】
+  Q1 /alipay/query 不 NPE：不存在的单号 / 假交易号 → 均 HTTP 200、无 500   ✅
+  R1 回归·正常支付：下单 5/1 → 支付 4/0、status=1、data:1                    ✅
+  R2 回归·重复支付幂等：第 2/3 次 data:0、库存不变                            ✅
+  R3 验签先行：无签名 + 金额 0.01 / 3699.00 → 均返回 failure（金额校验不绕过验签）  ✅
+  A1 金额不符（0.01 vs 3699.00）→ 拒绝     ✅ （修复前会直接改单 → 资损）
+  A2 金额一致（3699.00 vs 3699.00）→ 通过   ✅
+  A3 scale 差异（3699 / 3699.0 / 3699.00 / 3699.000）→ 全部通过   ✅
+     证明 compareTo 语义正确；若用 equals 则 '3699.00' 与 '3699.0' 会被误判为不符
+  A4 订单不存在 → 拒绝                     ✅
+  A5 金额为空/格式非法 → 返回 false，不抛异常  ✅（Java 层显式处理）
+  真实 HTTP：用未支付订单号调 /alipay/query → 订单 status 保持 0、未被误改   ✅
+  最终盘点：负锁定 0、负库存 0                                              ✅
+
+【验证局限（如实记录）】
+  notify 全链路需支付宝真实签名（RSA2 私钥），无法用 curl 伪造 ——
+  故金额校验在 notify 分支的验证方式为：代码审查 + 等价 SQL 比对 + query 分支实测。
+  沙箱真实交易的端到端验证留待有真实支付时补做。

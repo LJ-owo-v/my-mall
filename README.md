@@ -14,7 +14,7 @@
 [![Sa-Token](https://img.shields.io/badge/Sa--Token-1.42.0-red.svg)](https://sa-token.cc/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.0+-4479A1.svg)](https://www.mysql.com/)
 
-**9** 个微服务 · **277** 个 REST 端点 · **76** 张数据表 · **20** 项缺陷治理
+**9** 个微服务 · **276** 个 REST 端点 · **76** 张数据表 · **20** 项缺陷治理
 
 </div>
 
@@ -34,7 +34,6 @@
 - [关键设计](#-关键设计)
 - [接口文档](#-接口文档)
 - [路线图](#-路线图)
-- [贡献](#-贡献)
 - [致谢](#-致谢)
 
 ---
@@ -97,7 +96,7 @@
 - **自研网关**：基于 WebFlux 的路由 + 接口级鉴权 + 链路追踪 + 灰度接管
 - **统一认证中心**：按 `clientId` 分发管理端/门户端登录，Sa-Token + JWT 无状态鉴权
 - **服务治理**：Nacos 注册发现 + 配置中心（每服务独立 dataId）
-- **服务间调用**：Feign + 独立契约模块（`my-mall-api`）
+- **服务间调用**：各服务内 `@FeignClient` 直连（当前仅 auth → user / portal 两条链路）；契约模块 `my-mall-api` 已预留骨架，尚未启用
 
 ### 🔒 数据一致性
 
@@ -180,7 +179,7 @@ graph TB
 | `my-mall-common-core` | 契约层：`CommonResult` / `CommonPage` / 错误码 / 业务异常 |
 | `my-mall-common-web` | Servlet 栈公共件（全局异常 / traceId / OpenAPI） |
 | `my-mall-common-redis` | Redis 配置（与老项目序列化契约逐项对齐） |
-| `my-mall-api` | 服务间契约：DTO + Feign 接口 |
+| `my-mall-api` | 服务间契约（**骨架，未启用**）：预留 DTO + Feign 接口，当前服务间调用仍为各服务内 `@FeignClient` 直连 |
 
 ---
 
@@ -394,7 +393,9 @@ WHERE <主键> = ?
 **天然分布式安全** —— 拆库后依然有效，无需引入分布式锁。
 
 > 📄 完整的 20 项治理记录（问题现象 / 根因 / 实测数据 / 方案对比 / 验证结果）
-> 见 **[docs/后期优化文档.md](docs/后期优化文档.md)**。
+> 见 **[docs/后期优化文档.md](docs/后期优化文档.md)**；
+> 对应的**原始实测输出**（请求响应、库内数据前后对照、JMeter 结果文件）见
+> **[stress/result/](stress/result/)**，每个文件标注了它对应哪一项缺陷。
 
 ---
 
@@ -497,7 +498,7 @@ my-mall/
 │   ├── my-mall-common-web/      #   Servlet 公共件：全局异常 / traceId / OpenAPI
 │   └── my-mall-common-redis/    #   Redis 配置（与老项目序列化契约对齐）
 │
-├── my-mall-api/                 # 服务间契约：DTO + Feign 接口
+├── my-mall-api/                 # 服务间契约（骨架，未启用）
 │
 ├── my-mall-gateway/             # 🚪 自研网关（WebFlux，8201）
 ├── my-mall-auth/                # 🔐 统一认证中心（8401）
@@ -510,6 +511,7 @@ my-mall/
 ├── my-mall-file/                # 📁 文件服务（8090）
 │
 ├── NacosConfig/                 # Nacos 配置导入源（每服务一个目录）
+├── stress/result/               # 压测与验证证据（原始实测输出，按缺陷编号对照）
 └── docs/
     ├── 后期优化文档.md            # ★ 20 项缺陷治理完整记录
     ├── ai/                      # 各模块架构与接口说明
@@ -588,7 +590,7 @@ UPDATE oms_order SET status = 4 WHERE id = #{id} AND status = 0
 **迁移期**：网关按路径灰度 → 对比通过 → 逐步全量 → 老服务注销。
 **过程中**：老项目**一行代码不改**，作为参考实现与验收基座。
 
-> 迁移已完成，老服务已正式注销；本项目包名全部私有化（`com.mymall.*`）。
+> 迁移已完成，老服务于 **2026-10-16** 注销（见 commit `ecb5d1c`）；本项目包名已私有化为 `com.mymall.*`。
 
 ### 5. 服务端定价（永不信任客户端输入）
 
@@ -663,37 +665,6 @@ cartItem.setProductId(sku.getProductId());      // 补全
 - [ ] 分布式链路追踪（SkyWalking / Zipkin）
 - [ ] 容器化部署（Docker Compose / K8s）
 - [ ] 单元测试与集成测试覆盖率提升
-
----
-
-## 🤝 贡献
-
-欢迎提交 Issue 与 Pull Request。
-
-```bash
-# 1. Fork 并克隆
-git clone https://github.com/<your-name>/my-mall.git
-
-# 2. 创建分支
-git checkout -b feature/your-feature
-
-# 3. 提交（遵循 Conventional Commits）
-git commit -m "feat(module): 你的功能描述"
-
-# 4. 推送并发起 PR
-git push origin feature/your-feature
-```
-
-### 提交规范
-
-| 前缀 | 说明 |
-|---|---|
-| `feat(scope):` | 新功能 |
-| `fix(scope):` | 缺陷修复 |
-| `refactor(scope):` | 重构 |
-| `docs:` | 文档 |
-| `test:` | 测试 |
-| `chore:` | 构建 / 工具 |
 
 ---
 

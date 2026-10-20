@@ -1,0 +1,5 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1792046910780,559,01 会员登录 /sso/login,200,,重复提交线程组（同一会员 × 2） 1-2,text,true,,491,242,2,2,http://127.0.0.1:8092/sso/login,558,0,22
+1792046910780,559,01 会员登录 /sso/login,200,,重复提交线程组（同一会员 × 2） 1-1,text,true,,491,242,2,2,http://127.0.0.1:8092/sso/login,558,0,22
+1792046911363,87,03 重复提交 generateOrder（同一请求体）,200,,重复提交线程组（同一会员 × 2） 1-1,text,true,,286,497,2,2,http://127.0.0.1:8092/order/generateOrder,86,0,0
+1792046911363,87,03 重复提交 generateOrder（同一请求体）,200,,重复提交线程组（同一会员 × 2） 1-2,text,true,,1508,497,2,2,http://127.0.0.1:8092/order/generateOrder,87,0,0

@@ -1,0 +1,78 @@
+================================================================
+M5 阶段二 #4 满减分摊精度 —— 修复与验证证据
+时间：2026-10-16 11:26:16
+================================================================
+
+【问题】
+  calcFullReductionPromotion 按比例分摊满减：
+    reduceAmount = originalPrice.divide(totalAmount, RoundingMode.HALF_EVEN)
+                   .multiply(fullReduction.getReducePrice());
+  ★ divide 未指定 scale → 用 totalAmount.scale()（=2）→ 每件都舍入一次
+  → 分摊合计【小于】满减额，差额随件数放大。
+
+【复现（修复前，真实接口）】
+  商品 28 小米红米5A（满1000减120），加购 SKU 102(649) + 103(699) + 104(649)
+    totalAmount = 1997.00
+    promotionMessage = "满减优惠：满1000.00元，减120.00元"   ← 承诺减 120
+    各件分摊：0.32×120 + 0.35×120 + 0.32×120
+             = 38.40 + 42.00 + 38.40 = 118.80
+    promotionAmount = 118.8000                              ← 实际只减 118.80
+    payAmount       = 1878.2000
+    ★ 差额 1.20 元 —— 用户看到的优惠是 120，实际少减 1.20（多付 1.20）
+
+  Java 精确模拟（BigDecimal 语义）：
+    total=300.00 满减=30.00 三件各 100.00
+      100/300 = 0.33（scale=2，HALF_EVEN）→ 0.33×30 = 9.9000 ×3 = 29.7000
+      差额 = 0.3000
+    证明：误差随件数增加而放大（3 件 0.30，多 SKU 大额 1.20）
+
+【修复（最后一行补齐）】
+  BigDecimal allocated = BigDecimal.ZERO;
+  int lastIndex = itemList.size() - 1;
+  for (int i = 0; i <= lastIndex; i++) {
+      int quantity = ...;  BigDecimal quantityDec = new BigDecimal(quantity);
+      BigDecimal rowReduce;
+      if (i == lastIndex) {
+          rowReduce = fullReduction.getReducePrice().subtract(allocated);   // ★ 补齐
+      } else {
+          BigDecimal rowAmount = originalPrice.multiply(quantityDec);        // ★ 行小计
+          BigDecimal ratio = rowAmount.divide(totalAmount, 4, RoundingMode.HALF_EVEN);  // ★ 显式 scale=4
+          rowReduce = ratio.multiply(fullReduction.getReducePrice());
+          allocated = allocated.add(rowReduce);
+      }
+      BigDecimal reduceAmount = rowReduce.divide(quantityDec, 4, RoundingMode.HALF_EVEN); // ★ 还原为"每件优惠"
+      ...
+  }
+
+  三个关键修正点：
+    ① 最后一行用减法补齐 → 吸收所有舍入误差，合计必然精确等于满减额；
+    ② divide 显式指定 scale=4（原用 totalAmount.scale()=2）→ 减少单行舍入误差；
+    ③ ★ 按【行小计】(单价×数量) 分摊，再 ÷ 数量还原为"每件优惠"
+       —— 这是实现中发现并修正的 bug：reduceAmount 字段语义是【每件】优惠
+          （calcPromotionAmount 汇总时会再乘 quantity），若按"单价"比例分摊，
+          多件商品会算错。
+
+【验证（全 PASS）】
+  F1 商品28：649+699+649（总价1997，满减120）
+     明细 = SKU102×1:39.00 + SKU103×1:42.00 + SKU104×1:39.00
+     promotionAmount = 120.0000   payAmount = 1877.00   ✅ 精确
+     （修复前 118.80 / 1878.20）
+  F2 多件混合：102×2 + 103×1（总价同样 1997）
+     promotionAmount = 120.0000   ✅（验证"行小计分摊"正确处理数量）
+  F3 单行多件：102×3（总价 1947）
+     promotionAmount = 120.0000   ✅ 单行全额
+  F4 满500减50：102×1（649）
+     promotionAmount = 50.0000    ✅
+  F5 下单全流程：确认单 → 订单落库 → 订单明细
+     确认单  : totalAmount=1997.00 promotionAmount=120.0000 payAmount=1877.0000
+     订单表  : total_amount=1997.00 promotion_amount=120.00 pay_amount=1877.00
+     明细合计: SUM(promotion_amount × quantity) = 120.00
+     ★ 三处完全一致；支付成功（data:3）、status=1
+  F6 回归：#3 促销过期判断仍生效（商品 26/29/45 均"无优惠"、reduceAmount=0）  ✅
+
+【影响面】
+  该误差直接影响订单实付金额（用户多付）：
+    reduceAmount → orderItem.promotionAmount
+                 → calcPromotionAmount（Σ reduceAmount×quantity）
+                 → order.promotionAmount → order.payAmount
+  老项目核对：mall-swarm 的实现完全相同 → 属"照抄老项目"继承的既有缺陷。

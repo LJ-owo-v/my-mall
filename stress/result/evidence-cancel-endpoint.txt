@@ -1,0 +1,66 @@
+================================================================
+M5 阶段四 #17 前台取消订单接口冗余且实现错误 —— 修复与验证证据
+时间：2026-10-16 12:50:45
+================================================================
+
+【问题】/cancelOrder 是个"静默失效的假成功"接口
+
+  三个取消相关接口的现状：
+    | 接口                    | summary            | 调用方法                        | 实际效果              |
+    |-------------------------|--------------------|--------------------------------|-----------------------|
+    | POST /cancelOrder       | 取消单个超时订单    | sendDelayMessageCancelOrder()  | 发延迟消息，120 分钟才取消 ❌ |
+    | POST /cancelUserOrder   | 用户取消订单        | cancelOrder(orderId)           | 立即取消 ✅           |
+    | POST /cancelTimeOutOrder| 自动取消超时订单    | cancelTimeOutOrder()           | 手动触发兜底（调试用） |
+
+【复现（修复前，真实接口）】
+  造一张待付款订单（订单 191，库存 5/1、status=0）
+    ↓
+  调 POST /order/cancelOrder?orderId=191
+    → 响应 {"code":200,"message":"操作成功"}     ★ 假成功！
+    → 3 秒后：订单 status 仍为 0、库存仍为 5/1    ★ 什么都没做
+    → 实际要等 120 分钟（MQ 消息 TTL 到期）才真正取消
+
+  对照：调 POST /order/cancelUserOrder?orderId=191
+    → 响应 {"code":200,"message":"操作成功"}
+    → 1 秒内：订单 status=4、库存 5/0            ✅ 立即生效
+
+  ★ 这比"报错"更糟 —— 用户以为取消成功了，其实库存仍被冻结 2 小时。
+
+【背景核实】
+  · 老项目 mall-swarm 有【完全相同】的 /cancelOrder（同样调 sendDelayMessageCancelOrder）
+    → 属"照抄老项目"继承的既有缺陷，非迁移写错
+  · 新老项目的 order 接口清单完全一致（都是 10 个）
+  · 前端（mall-admin-web）对这两个接口【无任何调用】
+  · 控制器注释里原本就写着 "TODO 后期可能废弃"
+
+【修复（方案 A：删除接口 —— 用户确认不需要）】
+  删除 OmsPortalOrderController 的 /cancelOrder（原第 60~71 行），替换为说明性注释。
+
+  【保留】sendDelayMessageCancelOrder 服务方法 —— generateOrder 第 325 行仍在调用它
+          （下单时发延迟消息），不能删。
+
+  理由：
+    ① 该接口实现错误（假成功），且与 /cancelUserOrder 功能重复（都应为"立即取消"）；
+    ② 用户确认不需要该接口；
+    ③ 真正的"超时自动取消"由 MQ 延迟消息 + OrderTimeOutCancelTask 兜底负责，
+       无需暴露前台接口手动触发。
+
+【验证（全 PASS）】
+  V1 /cancelOrder 已移除 → HTTP 404（原为假成功 200）                ✅
+  V2 /cancelUserOrder 立即取消 → status=4、库存 5/1→5/0（1 秒内）     ✅
+  V3 延迟消息仍正常发出 → RabbitMQ mall.order.cancel.ttl 有消息       ✅
+  V4 超时兜底仍正常 → 订单 193 超时后被定时任务取消（12:50:25 status=4、
+     lock_stock 归零）；★ 同时验证 #11 回退（cron 恢复 10 分钟）后兜底依然工作 ✅
+  V5 其余 5 个接口回归 → /order/generateConfirmOrder、/order/list、
+     /order/detail/{id}、/member/coupon/list、/cart/list 均 HTTP 200    ✅
+
+【⚠️ 契约变更登记（有意差异）】
+  | 项       | 变更                                          |
+  |----------|-----------------------------------------------|
+  | 接口数量 | 10 → 9（老项目有 10 个，新项目少 /cancelOrder） |
+  | 性质     | 【有意差异】—— 违反"接口逐字节一致"，属有意的例外 |
+  | 理由     | 实现错误（假成功）+ 用户确认不需要 + 功能已有替代 |
+  | 影响     | 前端无调用 → 无实际影响；将来若有第三方调用会 404  |
+
+【数据清理】
+  测试订单已删、库存复位（SKU112 = 500/0）、超时设置恢复 120 分钟

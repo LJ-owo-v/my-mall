@@ -1,0 +1,100 @@
+================================================================
+M5 阶段四 #13 并发下同一券/积分被重复扣减 —— 修复与验证证据
+时间：2026-10-16 13:12:15
+================================================================
+
+【问题一：积分丢失更新（#13 主体）—— 确认会触发】
+
+  原实现（OmsPortalOrderServiceImpl 第 12 步）：
+    memberService.updateIntegration(id, currentMember.getIntegration() - useIntegration)
+    → updateIntegration 内部：record.setIntegration(传入值) + updateByPrimaryKeySelective(record)
+    → 即"读积分 → 应用层算差值 → 整行回写"，【无任何守卫】
+
+  触发路径（关键：可绕过 #14 的保护）：
+    oms_cart_item 只有 PRIMARY 索引（无会员唯一约束）
+      → 同一会员可以有【多个购物车行】（实测会员 11 有 2 行）
+      → 用【两个不同购物车行 + 不同 SKU】并发下单
+      → #14 的 occupyCartItems 抢占的是【不同行】→ 两个都成功 → 绕过 #14
+      → 两笔都走到第 12 步扣积分：都读到 1000、各算 700、后写覆盖先写
+      → 积分只扣一次（丢失更新）
+
+  复现（修复前，真实接口并发）：
+    会员 13 积分设为 1000；造 2 个购物车行（SKU110 / SKU111）
+    并发发起两笔下单，各用积分 300
+    结果：下单成功数 = 2，会员积分 = 700（应为 400）→ 丢失 300 积分
+
+【问题二：use_integration 不落库（顺带发现的连带缺陷）—— 确认存在】
+
+  代码顺序（原实现）：
+    第 298 行  orderMapper.insert(order);                                    ← 先插入
+    第 312 行  order.setUseIntegration(orderParam.getUseIntegration());      ← 后赋值
+  → 赋值在 insert 之后 → use_integration 字段【永远不写入数据库】
+
+  实测：订单 194/195 的 use_integration 均为 NULL（虽然积分确实被扣了 300）
+
+  连锁影响（更严重）：
+    cancelOrder / cancelTimeOutOrder 里判断
+      if (cancelOrder.getUseIntegration() != null) { ...退积分... }
+    → 字段恒为 NULL → 【取消订单永不退还积分】→ 用户资损
+
+  背景：老项目 mall-swarm 同样如此（insert 在 224 行、setUseIntegration 在 236 行）
+    → 属"照抄老项目"继承的既有缺陷（与 #17 同类）
+
+【问题三：券核销先查后写 TOCTOU（#13 的另一半）】
+
+  原实现（updateCouponStatus）：
+    ① selectByExample 查 use_status=0 的记录      ← 先查
+    ② setUseStatus(1) + updateByPrimaryKeySelective ← 后写（无 use_status 条件）
+  → 并发下可能都查到 use_status=0 → 都执行更新（重复核销）
+
+【修复（三处）】
+
+  ① 积分原子扣减（新增 UmsMemberMapper.deductIntegrationSafely + XML）
+       UPDATE ums_member SET integration = integration - #{points}
+       WHERE id = #{memberId} AND integration >= #{points}
+     · DB 侧自减，消除"读到旧值后覆盖"；WHERE 守卫保证不扣成负数；
+     · 影响行数=0 → Asserts.fail("积分不足，无法下单") 触发整体回滚；
+     · 扣减后 memberCacheService.delMember() 清缓存（原方法内部也做，保持一致）。
+
+  ② use_integration 落库（把赋值移到 insert 之前）
+     · 在"填充订单信息"阶段（insert 之前）setUseIntegration；
+     · 未用积分时显式 setUseIntegration(0)（而非留 NULL）。
+     → 既修数据不落库，也修"取消不退积分"。
+
+  ③ 券核销改条件更新（新增 SmsCouponHistoryMapper.useCouponIfUnused + XML）
+       UPDATE sms_coupon_history SET use_status = 1, use_time = NOW()
+       WHERE coupon_id = #{couponId} AND member_id = #{memberId} AND use_status = 0
+     · 把「检查」与「更新」合并为一条原子语句；
+     · 影响行数=0 → 该券已使用/不存在 → 静默跳过（保持原容错行为）；
+     · 退券路径 releaseCoupon 本身已是条件更新（WHERE use_status=1），未改动。
+
+  附带：注入 memberMapper / memberCacheService（原类中未注入）。
+
+【验证（全 PASS）】
+
+  V1 并发两笔各用 300 积分（复现同一实验）
+     修复前：积分 700（丢失 300）
+     修复后：积分 400  ✅ 各扣一次
+  V2 use_integration 是否落库
+     修复前：NULL
+     修复后：订单 196/197 均为 300  ✅（integration_amount 也一并正确 = 3.00）
+  V3 ★ 取消订单是否退积分（连带缺陷的关键验证）
+     取消订单 196 前积分 400 → 取消后 700  ✅ 正确退还 300
+     （修复前该字段为 NULL，取消时永不退积分）
+  V4 积分不足（应用层前置检查）
+     积分 100、尝试用 500 → 返回 {"code":500,"message":"积分不可用"}、积分仍 100  ✅
+     ★ 如实说明：此处触发的是 getUseIntegrationAmount 的【第一道防线】，
+       不是我新加的 Asserts.fail("积分不足")，故另做 V5 直测第二道防线。
+  V5 ★ 原子守卫 SQL 层直测（第二道防线）
+     余额足够扣 50  → 影响行数 1、积分 50        ✅
+     余额不足扣 500 → 影响行数 0、积分不变       ✅（不扣成负数）
+     连续三次各扣 50（初始 100）→ 积分 0（非 -50）✅（第三次被守卫拦住）
+  V6 正常下单+支付回归
+     下单：use_integration=200、积分 1000→800、库存 5/1
+     支付：{"code":200,"message":"支付成功"}、订单 status=1  ✅
+  V7 ★ 券核销条件更新 SQL 层直测
+     首次核销 → 影响行数 1  ✅
+     重复核销 → 影响行数 0（拦住重复核销）✅
+
+【数据清理】
+  测试订单/购物车已删；会员13 积分复位 3900；SKU 110/111/112 库存复位；负锁定 0。

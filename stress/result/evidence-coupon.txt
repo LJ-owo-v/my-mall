@@ -1,0 +1,50 @@
+================================================================
+M5 阶段二 #7/#8 优惠券并发（超发 + 限领绕过）—— 修复与验证证据
+时间：2026-10-15 20:11:52
+================================================================
+
+【问题① #7 券超发】
+  缺陷代码：coupon.setCount(coupon.getCount()-1); couponMapper.updateByPrimaryKey(coupon);
+  即"SELECT count → 应用层 count-1 → 整行回写"，无 count>0 守卫 → 并发下丢失扣减 → 超发。
+  复现（SQL 层确定性对照）：库存=2，两个请求都读到 2 → A 写1、B 也写1（覆盖A）
+    → count 只从 2 减到 1（丢 1 次），第 3 人再来 count=1>0 放行 → 超发。
+  复现（多会员并发）：8 会员抢 count=2 → 实际发出 3 张（超发 1 张）。
+
+【问题② #8 限领绕过】
+  缺陷代码：countByExample 先查已领数 → count>=perLimit 判断 → insert（检查与插入分离，TOCTOU）。
+  并发下同一会员连点两次都会读到"已领 0" → 都插入 → 超领。
+  复现（JMeter 8 并发同一会员领 per_limit=1）：领到【6 张】→ FAIL <= 超领！
+
+【关键发现：per_limit 非 1，否决唯一索引方案】
+  券27 per_limit=10、券28=5、券31=5、券29/30=1。
+  优化文档建议"加唯一索引 (coupon_id, member_id)"，但唯一索引只能保证"一人一张"，
+  与"限领 N 张"语义冲突 → 方案不可行。改用"条件插入"。
+
+【修复】
+  #7：新增 SmsCouponMapper.decreaseCount
+      UPDATE sms_coupon SET count=count-1, receive_count=receive_count+1
+      WHERE id=#{couponId} AND count > 0
+      （与 #9 lockStockSafely 同款：检查与扣减合并为原子语句，按影响行数裁决）
+  #8：新增 SmsCouponHistoryMapper.insertIfUnderLimit
+      INSERT INTO sms_coupon_history (...)
+      SELECT ... FROM DUAL
+      WHERE (已领数) < (per_limit)
+      （与 #14 occupyCartItems 同款：把检查并入写操作）
+  Service.add() 顺序：先原子扣库存（affected=0 → "手慢了，优惠券已被抢完"）
+                    再条件插记录（affected=0 → "您已经领取过该优惠券"）
+  两者在同一 @Transactional 内，任一失败整体回滚。
+
+【验证（全 PASS）】
+  复验 #8：8 并发同一会员领 per_limit=1 → 只领【1 张】（修复前 6 张）   PASS
+  复验 #7：8 会员并发抢 count=2 → 只发【2 张】（修复前 3 张）           PASS
+  C4 正常领券：库存足 + 未领满 → 领取成功                              PASS
+  C5 库存不足：count=0 → "优惠券已经领完了"                            PASS
+  C6 已领满：per_limit=1 已领 1 张 → "您已经领取过该优惠券"            PASS
+  回归：/member/coupon/list、/listHistory 均 200                       PASS
+
+【局限（如实记录）】
+  insertIfUnderLimit 在 InnoDB 默认 REPEATABLE READ 下，并发事务的 COUNT(*) 子查询
+  可能读到同一快照，毫秒级窗口仍可能超领。其价值在于把竞态窗口从"整个方法跨度"
+  压缩到"单条语句"的瞬间。若需严格兜底：per_limit=1 时加唯一索引 (coupon_id,member_id)，
+  per_limit>1 时需分布式锁或"领取序号列 + 唯一索引"。
+  （已在方法注释中说明）
