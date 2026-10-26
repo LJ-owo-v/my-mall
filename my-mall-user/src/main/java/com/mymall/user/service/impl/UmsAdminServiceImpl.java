@@ -377,7 +377,31 @@ public  class UmsAdminServiceImpl implements UmsAdminService {
             adminRoleRelationDao.insertList(list);
         }
 
+        // 4. 角色关系变了 → 权限变了，必须让"旧权限"立刻失效
+        //    permissionList 是登录时算好写进 Sa-Token session 的（网关 StpInterfaceImpl 直接读 session），
+        //    不处理的话，被降权的人会一直拿着旧权限用到 token 过期（timeout=7 天），
+        //    提权的人也要等重新登录才生效。
+        //    这里选择"强制重登"：先清管理员缓存，再注销该账号的全部会话。
+        adminCacheService.delAdmin(adminId);
+        kickOutForPermissionChange(adminId);
+
         return count;
+    }
+
+    /**
+     * 权限变更后强制指定管理员重新登录（is-concurrent=true，会踢掉他所有端）。
+     *
+     * <p>失败只告警不抛出：角色关系已经落库，不能因为会话清理失败把整个分配操作判为失败，
+     * 但必须留下日志，因为此时旧权限可能仍在生效。
+     */
+    private void kickOutForPermissionChange(Long adminId) {
+        try {
+            StpUtil.logout(adminId);
+            LOGGER.info("管理员[{}]权限已变更，已强制其重新登录", adminId);
+        } catch (Exception e) {
+            LOGGER.warn("管理员[{}]权限已变更，但强制下线失败，旧权限可能仍在生效: {}",
+                    adminId, e.getMessage());
+        }
     }
 
 
