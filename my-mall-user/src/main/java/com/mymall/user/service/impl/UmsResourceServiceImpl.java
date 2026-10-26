@@ -19,6 +19,10 @@ import java.util.TreeMap;
 
 @Service
 public class UmsResourceServiceImpl implements UmsResourceService {
+
+    /** 重建权限映射表时用的临时 key 后缀：写满后 RENAME 到正式 key，避免 del/hSetAll 之间的空窗 */
+    private static final String REBUILD_KEY_SUFFIX = ":rebuild";
+
     @Autowired
     private UmsResourceMapper resourceMapper;
     @Autowired
@@ -65,12 +69,20 @@ public class UmsResourceServiceImpl implements UmsResourceService {
                     resource.getId() + ":" + resource.getName());
         }
 
-        // 4. 先删除 Redis 里旧的映射表（Hash 结构）
-        redisService.del(AuthConstant.PATH_RESOURCE_MAP);
-
-        // 5. 把新的映射表全量写入 Redis
-        //    key=auth:pathResourceMap，field=路径，value=权限标识
-        redisService.hSetAll(AuthConstant.PATH_RESOURCE_MAP, pathResourceMap);
+        // 4. 原子替换：先写临时 key，再用 RENAME 整体覆盖正式 key
+        //    【为什么不能 del + hSetAll】两条命令之间 key 不存在，网关 matchPermission 读到空表
+        //    → needPermissionList 为空 → 整段接口级权限校验被跳过 → 所有管理端接口短暂放行。
+        //    RENAME 是 Redis 单线程内的原子操作，网关要么读到旧表、要么读到新表，不存在空窗。
+        String tmpKey = AuthConstant.PATH_RESOURCE_MAP + REBUILD_KEY_SUFFIX;
+        if (pathResourceMap.isEmpty()) {
+            // Redis 不保存空 Hash：putAll 空 map 等于什么都没写，紧接着 RENAME 会因源 key 不存在而报错。
+            // 这里直接删正式 key（网关侧会 fail-close 并在日志里报出"映射表为空"），不写空结构。
+            redisService.del(AuthConstant.PATH_RESOURCE_MAP);
+            return pathResourceMap;
+        }
+        redisService.del(tmpKey);                        // 清掉上次异常中断可能留下的残留
+        redisService.hSetAll(tmpKey, pathResourceMap);   // key=临时 key，field=路径，value=权限标识
+        redisService.rename(tmpKey, AuthConstant.PATH_RESOURCE_MAP);
 
         return pathResourceMap;
     }

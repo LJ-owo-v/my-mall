@@ -45,6 +45,11 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
+    public void rename(String oldKey, String newKey) {
+        redisTemplate.rename(oldKey, newKey);
+    }
+
+    @Override
     public Boolean expire(String key, long time) {
         return redisTemplate.expire(key, time, TimeUnit.SECONDS);
     }

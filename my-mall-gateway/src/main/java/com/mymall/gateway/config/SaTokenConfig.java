@@ -39,6 +39,15 @@ public class SaTokenConfig {
     private static final Logger log = LoggerFactory.getLogger(SaTokenConfig.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * 权限映射表不可用时的"拒绝"权限码：任何真实角色都不会拥有它，
+     * 于是 checkPermission 必然抛 NotPermissionException → 统一转 403。
+     */
+    private static final String PERMISSION_MAP_UNAVAILABLE = "__permission_map_unavailable__";
+
+    /** 权限映射表的重建入口（唯一允许在"表不可用"时通过的路径，用于自愈） */
+    private static final String BOOTSTRAP_PATH = "/mall-admin/resource/initPathResourceMap";
+
     /** Sa-Token session 里存后台管理员信息的 key（定义收敛到 AuthConstant） */
     public static final String STP_ADMIN_INFO = com.mymall.common.constant.AuthConstant.STP_ADMIN_INFO;
     /** 会员信息 key（同上） */
@@ -67,35 +76,62 @@ public class SaTokenConfig {
                     // ② 前台会员体系（loginType = memberLogin）
                     SaRouter.match("/mall-portal/**", r -> StpMemberUtil.checkLogin()).stop();
 
-                    // ③ 后台管理体系（loginType = login）
-                    SaRouter.match("/mall-admin/**", r -> StpUtil.checkLogin());
+                    // ③ 后台管理体系（loginType = login）+ ④ 接口级权限校验
+                    //    合并成一段：权限映射表里只有 /mall-admin/** 的条目，
+                    //    所以只对管理端读 Redis，会员请求不再白读一次整张 hash
+                    SaRouter.match("/mall-admin/**", r -> {
+                        StpUtil.checkLogin();
 
-                    // ④ 接口级权限：路径 → 所需权限，命中则校验（拥有任意一个即可）
-                    List<String> needPermissionList = matchPermission(
-                            SaHolder.getRequest().getRequestPath());
-                    if (!needPermissionList.isEmpty()) {
-                        SaRouter.match(SaHolder.getRequest().getRequestPath(),
-                                r -> StpUtil.checkPermissionOr(needPermissionList.toArray(new String[0])));
-                    }
+                        String requestPath = SaHolder.getRequest().getRequestPath();
+                        List<String> needPermissionList = matchPermission(requestPath);
+                        if (needPermissionList == null) {
+                            // 映射表不可用（Redis 异常 / 表为空）：宁可拒绝也不能放行。
+                            // 若按"空列表 = 无需权限"处理，Redis 抖一下或表被误删就等于管理端裸奔。
+                            if (BOOTSTRAP_PATH.equals(requestPath)) {
+                                // 唯一的自愈入口：表为空时还得让人能把它重建出来，
+                                // 否则只能去连 Redis 手改或重启服务。这里仍然要求已登录。
+                                log.warn("权限映射表不可用，放行自愈入口 {} 用于重建映射表", requestPath);
+                            } else {
+                                StpUtil.checkPermission(PERMISSION_MAP_UNAVAILABLE);
+                            }
+                        } else if (!needPermissionList.isEmpty()) {
+                            // 命中多条时拥有任意一个即可
+                            StpUtil.checkPermissionOr(needPermissionList.toArray(new String[0]));
+                        }
+                    });
                 })
                 .setError(this::handleException);
     }
 
-    /** 从 Redis 权限映射表里找出当前路径需要的权限码 */
+    /**
+     * 从 Redis 权限映射表里找出当前路径需要的权限码。
+     *
+     * @return 命中/未命中路径对应的权限列表；映射表不可用时返回 {@code null}（调用方据此 fail-close）
+     */
     private List<String> matchPermission(String requestPath) {
         List<String> needPermissionList = new ArrayList<>();
+        Map<Object, Object> pathResourceMap;
         try {
-            Map<Object, Object> pathResourceMap = redisTemplate.opsForHash()
+            pathResourceMap = redisTemplate.opsForHash()
                     .entries(MyMallBaseRedisConfig.PATH_RESOURCE_MAP);
-            PathMatcher pathMatcher = new AntPathMatcher();
-            for (Map.Entry<Object, Object> entry : pathResourceMap.entrySet()) {
-                String pattern = String.valueOf(entry.getKey());
-                if (pathMatcher.match(pattern, requestPath)) {
-                    needPermissionList.add(String.valueOf(entry.getValue()));
-                }
-            }
         } catch (Exception e) {
-            log.error("读取权限映射表失败，本次跳过接口级权限校验: {}", e.getMessage());
+            log.error("读取权限映射表失败，本次拒绝访问（fail-close）: {}", e.getMessage());
+            return null;
+        }
+        if (pathResourceMap == null || pathResourceMap.isEmpty()) {
+            // 空表只可能是两种原因：mall-admin 还没初始化，或重建过程被打断。
+            // 无论哪种，此时放行都等于关掉权限校验，所以按拒绝处理并留下可排查的错误日志。
+            log.error("权限映射表 {} 为空，本次拒绝访问（fail-close）。"
+                            + "请检查 mall-admin 是否已初始化资源，或 Redis 中该 key 是否被误删",
+                    MyMallBaseRedisConfig.PATH_RESOURCE_MAP);
+            return null;
+        }
+        PathMatcher pathMatcher = new AntPathMatcher();
+        for (Map.Entry<Object, Object> entry : pathResourceMap.entrySet()) {
+            String pattern = String.valueOf(entry.getKey());
+            if (pathMatcher.match(pattern, requestPath)) {
+                needPermissionList.add(String.valueOf(entry.getValue()));
+            }
         }
         return needPermissionList;
     }

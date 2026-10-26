@@ -31,6 +31,14 @@ public interface RedisService {
     Long del(List<String> keys);
 
     /**
+     * 原子重命名 key（目标 key 会被整体覆盖）。
+     *
+     * <p>用于"先写临时 key，再一次性替换正式 key"的场景：RENAME 在 Redis 内是单线程原子操作，
+     * 读方要么看到旧值、要么看到新值，不会读到"已删除但还没写入"的中间态。
+     */
+    void rename(String oldKey, String newKey);
+
+    /**
      * 设置过期时间
      */
     Boolean expire(String key, long time);
