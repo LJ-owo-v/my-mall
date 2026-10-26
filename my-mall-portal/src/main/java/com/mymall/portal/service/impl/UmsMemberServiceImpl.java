@@ -180,6 +180,9 @@ public class UmsMemberServiceImpl  implements UmsMemberService {
 
         // ⑤ 更新数据库（只更新非null字段）
         memberMapper.updateByPrimaryKeySelective(umsMember);
+
+        // ⑥ 删除会员缓存：缓存里存的是改密前的对象（含旧密码），不删会读到过期数据
+        memberCacheService.delMember(umsMember.getId());
     }
 
     /**
