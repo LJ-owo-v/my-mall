@@ -99,7 +99,12 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
         result.setCouponHistoryDetailList(couponHistoryDetailList);
 
         // ⑤ 获取用户积分
-        result.setMemberIntegration(currentMember.getIntegration());
+        //    刻意读库而不是用 currentMember.getIntegration()：积分参与金额计算，
+        //    而 currentMember 来自 Redis（TTL 24h），缓存未失效时会显示旧值，
+        //    导致"确认页显示有 1000 积分、下单时却提示不足"。
+        //    确认页是一次下单一次的低频操作，多一次主键查询换准确性是划算的。
+        UmsMember freshMember = memberService.getById(currentMember.getId());
+        result.setMemberIntegration(freshMember == null ? 0 : freshMember.getIntegration());
 
         // ⑥ 获取积分使用规则（多少积分抵1元，最多抵多少）
         UmsIntegrationConsumeSetting integrationConsumeSetting =
@@ -144,6 +149,15 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
 
         // ========== 2. 获取购物车促销信息，生成订单明细 ==========
         UmsMember currentMember = memberService.getCurrentMember();
+
+        // 积分一律以数据库为准，不能用缓存里的值做"够不够"判断：
+        // currentMember 来自 Redis（TTL 24h），而第 12 步扣减是
+        //   SET integration = integration - n WHERE integration >= n
+        // 两处口径不一致时，会出现"前置校验按旧值放过、扣减时影响行数=0 → 整单回滚"，
+        // 用户看到的就是"我明明有积分，却说我积分不足"。这里统一成 DB 值，与扣减守卫同源。
+        UmsMember freshMember = memberService.getById(currentMember.getId());
+        Integer availableIntegration = freshMember == null ? 0 : freshMember.getIntegration();
+
         List<CartPromotionItem> cartPromotionItemList =
                 cartItemService.listPromotion(currentMember.getId(), orderParam.getCartIds());
 
@@ -218,10 +232,12 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
             // 使用积分：计算可抵扣金额，按价格比例分摊
             BigDecimal totalAmount = calcTotalAmount(orderItemList);
             BigDecimal integrationAmount = getUseIntegrationAmount(
-                    orderParam.getUseIntegration(), totalAmount, currentMember,
+                    orderParam.getUseIntegration(), totalAmount, availableIntegration,
                     orderParam.getCouponId() != null);
             if (integrationAmount.compareTo(BigDecimal.ZERO) == 0) {
-                Asserts.fail("积分不可用");
+                // 提示里带上真实可用积分：只说"积分不可用"用户无法判断是积分不够、
+                // 还是不能和优惠券共用、还是没到最低使用门槛
+                Asserts.fail("积分不可用（当前可用 " + availableIntegration + " 积分）");
             }
             // 按比例分摊到每件商品
             for (OmsOrderItem orderItem : orderItemList) {
@@ -334,7 +350,10 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
             int deducted = memberMapper.deductIntegrationSafely(
                     currentMember.getId(), orderParam.getUseIntegration());
             if (deducted == 0) {
-                Asserts.fail("积分不足，无法下单");
+                // 走到这里说明查询之后积分又被并发消费了（或数据异常）。
+                // 提示要给出最新可用值，而不是让用户对着"我明明有积分"猜。
+                UmsMember latest = memberService.getById(currentMember.getId());
+                Asserts.fail("积分不足，当前可用 " + (latest == null ? 0 : latest.getIntegration()) + " 积分");
             }
             // 清会员缓存（缓存里存的是旧积分，不删则下次读到过期数据）
             memberCacheService.delMember(currentMember.getId());
@@ -1145,19 +1164,20 @@ public class OmsPortalOrderServiceImpl  implements OmsPortalOrderService {
      *
      * @param useIntegration 用户想使用的积分数量
      * @param totalAmount    订单总金额（原价）
-     * @param currentMember  当前登录用户
+     * @param availableIntegration 用户当前可用积分（**必须来自实时查询，不能用缓存**，
+     *                            否则与第 12 步的 DB 条件更新口径不一致）
      * @param hasCoupon      是否已经使用优惠券
      * @return 积分可抵扣金额，返回0表示积分不可用
      */
     private BigDecimal getUseIntegrationAmount(Integer useIntegration,
                                                BigDecimal totalAmount,
-                                               UmsMember currentMember,
+                                               Integer availableIntegration,
                                                boolean hasCoupon) {
         BigDecimal zeroAmount = BigDecimal.ZERO;
 
         // ① 判断用户是否有这么多积分
         // useIntegration > 用户实际积分 → 积分不够
-        if (useIntegration.compareTo(currentMember.getIntegration()) > 0) {
+        if (availableIntegration == null || useIntegration.compareTo(availableIntegration) > 0) {
             return zeroAmount;
         }
 
