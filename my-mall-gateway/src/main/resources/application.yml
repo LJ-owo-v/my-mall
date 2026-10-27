@@ -15,8 +15,9 @@ spring:
     gateway:
       server:
         webflux:
-          # 显式 5 条路由（与原项目等价）；不开启 discovery.locator，
-          # 避免把所有注册服务（含 monitor）自动暴露成路由
+          # 显式 8 条路由：mall-auth / mall-portal / mall-search 各一条，
+          # /mall-admin/** 按业务域拆成 user/product/marketing/order/file 五条；
+          # 不开启 discovery.locator，避免把所有注册服务（含 monitor）自动暴露成路由
           #现在已经重新路由到新服务
           routes:
             - id: mall-auth

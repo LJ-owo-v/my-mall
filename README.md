@@ -624,7 +624,7 @@ cartItem.setProductId(sku.getProductId());      // 补全
 |---|---|
 | 测试框架 | JUnit 5.12 + Mockito 5.17 + AssertJ 3.27（`spring-boot-starter-test` 传递引入，**未新增测试依赖**） |
 | 覆盖率工具 | JaCoCo 0.8.12（`prepare-agent` + `report` 绑定在 `test` 阶段） |
-| 全仓用例 | **98 个**：业务单元测试 90 + 网关集成测试 8 |
+| 全仓用例 | **98 个**（业务单元 90 + 网关集成 8），`mvn test` 全绿 |
 | 覆盖统计范围 | 排除 MBG 生成的 `model/**`、`mapper/**`、`*Example`、`dto/**`、`*Application` |
 | **11 个核心 Service** | 行覆盖 **63.0%**（1084 / 1721 行） |
 
@@ -703,9 +703,8 @@ mvn -pl my-mall-portal test -Dtest=OmsPortalOrderServiceImplTest   # 只跑单�
 
 覆盖率报告：各模块 `target/site/jacoco/index.html`（原始数据 `target/site/jacoco/jacoco.csv`）。
 
-> **已知**：`my-mall-gateway` 的 `GatewayRuntimeTest.routesLoaded` 仍断言旧版 5 条路由
-> （配置已把 admin 拆为 5 条，实际共 8 条），该用例待与路由拆分同步更新；
-> 本轮新增的 90 个业务单元测试全部通过。
+> 网关的 `GatewayRuntimeTest` 会真实启动 Netty（随机端口）并依赖 Nacos，跑它需要本地
+> Nacos 可用；其余 90 个业务单元测试不依赖任何中间件，可在纯离线环境执行。
 
 ---
 
