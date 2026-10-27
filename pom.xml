@@ -189,6 +189,33 @@
                     <parameters>true</parameters>
                 </configuration>
             </plugin>
+            <!-- 覆盖率统计。排除 MBG 生成物（占全仓 79% 行）与启动类，
+                 否则分母被 Criteria 样板稀释，数字不可解释。 -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <configuration>
+                    <excludes>
+                        <exclude>**/model/**</exclude>
+                        <exclude>**/mapper/**</exclude>
+                        <exclude>**/*Example.class</exclude>
+                        <exclude>**/*Application.class</exclude>
+                        <exclude>**/dto/**</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals><goal>report</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
     <repositories>

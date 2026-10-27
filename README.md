@@ -32,6 +32,7 @@
 - [快速开始](#-快速开始)
 - [项目结构](#-项目结构)
 - [关键设计](#-关键设计)
+- [测试与覆盖率](#-测试与覆盖率)
 - [接口文档](#-接口文档)
 - [路线图](#-路线图)
 - [致谢](#-致谢)
@@ -113,6 +114,12 @@
 - **会员**：注册登录、积分、成长值、收货地址、优惠券
 - **支付**：支付宝沙箱（下单 / 回调 / 查询 / 退款）
 - **搜索**：Elasticsearch 商品搜索、分类/品牌/属性聚合、相关推荐
+
+### 🧪 工程质量
+
+- **单元测试**：11 个核心 Service / 90 个用例（JUnit 5 + Mockito 5，**不启容器**）
+- **覆盖率**：JaCoCo 0.8.12，排除 MBG 样板代码后目标类行覆盖 **63.0%**
+- **补测产出**：定位 6 处边界缺陷（详见 [测试与覆盖率](#-测试与覆盖率)）
 
 ---
 
@@ -453,7 +460,8 @@ NacosConfig/
 ### 4. 编译
 
 ```bash
-mvn clean install -DskipTests
+mvn clean install -DskipTests      # 只编译打包，跳过测试（首次构建最快）
+mvn -T 1C test                     # 全量测试 + 生成 JaCoCo 报告，口径见「测试与覆盖率」
 ```
 
 ### 5. 启动服务
@@ -608,6 +616,99 @@ cartItem.setProductId(sku.getProductId());      // 补全
 
 ---
 
+## 🧪 测试与覆盖率
+
+### 技术选型
+
+| 项 | 值 |
+|---|---|
+| 测试框架 | JUnit 5.12 + Mockito 5.17 + AssertJ 3.27（`spring-boot-starter-test` 传递引入，**未新增测试依赖**） |
+| 覆盖率工具 | JaCoCo 0.8.12（`prepare-agent` + `report` 绑定在 `test` 阶段） |
+| 全仓用例 | **98 个**：业务单元测试 90 + 网关集成测试 8 |
+| 覆盖统计范围 | 排除 MBG 生成的 `model/**`、`mapper/**`、`*Example`、`dto/**`、`*Application` |
+| **11 个核心 Service** | 行覆盖 **63.0%**（1084 / 1721 行） |
+
+> 覆盖率口径：**分母是这 11 个业务类的可执行行，不是整个项目**。
+> 6 个被测模块的模块级行覆盖为 33.0%（3982 / 12063 行），两者不能混说。
+
+### 业务单元测试
+
+全部为**纯 Mockito 单元测试**（`@ExtendWith(MockitoExtension.class)`），**不启动 Spring 容器**。
+
+| 模块 | 被测类 | 用例 | 行覆盖 |
+|---|---|---|---|
+| portal | `OmsPortalOrderServiceImpl` | 17 | 63.0% |
+| portal | `OmsPromotionServiceImpl` | 11 | 98.7% |
+| portal | `AlipayServiceImpl` | 9 | 74.2% |
+| portal | `UmsMemberCouponServiceImpl` | 7 | 42.1% |
+| portal | `OmsCartItemServiceImpl` | 6 | 70.1% |
+| product | `PmsProductServiceImpl` | 8 | 60.5% |
+| search | `EsProductServiceImpl` | 9 | 58.2% |
+| user | `UmsAdminServiceImpl` | 8 | 41.5% |
+| order | `OmsOrderServiceImpl` | 7 | 63.5% |
+| marketing | `SmsFlashPromotionSessionServiceImpl` | 4 | 75.8% |
+| marketing | `SmsCouponServiceImpl` | 4 | 53.6% |
+| | **合计** | **90** | **63.0%** |
+
+### 三个关键取舍
+
+**1. 为什么不用 `@SpringBootTest`**
+
+portal 启动依赖 MySQL + Redis + MongoDB + RabbitMQ + Elasticsearch 五个中间件，
+缺一个就起不来。单元测试要验证的是**分支逻辑**（幂等裁决、金额分摊、库存条件更新），
+不是 Bean 装配——装配问题属于集成测试的职责。用纯 Mock 后，测试可在任意无中间件环境运行。
+
+**2. 静态方法怎么隔离**
+
+支付宝验签 `AlipaySignature.rsaCheckV1` 与 Sa-Token `StpUtil.logout` 是静态调用。
+Mockito 5 默认 inline mock maker，可直接 `mockStatic`，并用 try-with-resources 限定作用域：
+
+```java
+try (MockedStatic<AlipaySignature> sig = mockStatic(AlipaySignature.class)) {
+    sig.when(() -> AlipaySignature.rsaCheckV1(anyMap(), anyString(), anyString(), anyString()))
+       .thenReturn(true);
+    // 验签通过 / 不通过两条路径都变得可控
+}
+```
+
+Sa-Token 部分优先选**不依赖登录态的方法**（`getAdminByUsername` / `register` / `updatePassword` / `updateRole`），
+只有必须验证"权限变更后强制下线"时才动 `mockStatic`。
+
+**3. 断言打在"落库对象"和"SQL 条件"上**
+
+不只验证方法被调用，而是用 `ArgumentCaptor` 抓住传给 Mapper 的对象与 `Example`：
+落库价格是否真的是服务端价（而非前端传的 0.01）、删除条件里是否真的带了 `member_id`（归属校验）。
+
+### 补测中定位的边界问题（6 处，**仅登记未修复**）
+
+| # | 位置 | 现象 | 风险 |
+|---|---|---|---|
+| 1 | `OmsCartItemServiceImpl#updateQuantity` | 数量无下界守卫，`-5` 直接落库（Controller 也未校验） | 中 |
+| 2 | `UmsMemberCouponServiceImpl#listCart` | 门槛判断用 `intValue()` 截断，实付 99.9 对门槛 100 被判"可用"，券额可能超过订单额 | **中高（资损方向）** |
+| 3 | `OmsPromotionServiceImpl#calcCartPromotion` | 促销信息缺行时 `promotionProduct` 为 null → NPE，购物车列表 500 | 中 |
+| 4 | `EsProductServiceImpl#search/#recommend` | `PageRequest.of(pageNum, pageSize)` 页码 0 基 / 1 基混用，请求第 1 页会跳过前 N 条 | 中 |
+| 5 | `OmsOrderServiceImpl#close` | 影响行数为 0 仍写"订单关闭"操作历史，审计日志与实际状态不符 | 低 |
+| 6 | `UmsAdminServiceImpl#updatePassword` | 未校验新旧密码相同，返回成功 | 低 |
+
+> 均为**只记录不修改**：测试与业务修复混在同一提交里，就无法证明"测试先失败"。
+> 修复应走独立分支——先提交失败用例锁定行为，再改代码转绿。
+
+### 怎么跑
+
+```bash
+mvn -T 1C test                            # 全量测试 + 生成覆盖率报告
+mvn -pl my-mall-portal -am test           # 只跑单个模块
+mvn -pl my-mall-portal test -Dtest=OmsPortalOrderServiceImplTest   # 只跑单个类
+```
+
+覆盖率报告：各模块 `target/site/jacoco/index.html`（原始数据 `target/site/jacoco/jacoco.csv`）。
+
+> **已知**：`my-mall-gateway` 的 `GatewayRuntimeTest.routesLoaded` 仍断言旧版 5 条路由
+> （配置已把 admin 拆为 5 条，实际共 8 条），该用例待与路由拆分同步更新；
+> 本轮新增的 90 个业务单元测试全部通过。
+
+---
+
 ## 📘 接口文档
 
 服务启动后访问 **Knife4j 聚合文档**：
@@ -656,6 +757,7 @@ cartItem.setProductId(sku.getProductId());      // 补全
 - [x] **20 项缺陷治理**（10 修复 / 7 核实不改 / 3 主体完成）
 - [x] 数据对账机制（5 条不变量 + 定时任务）
 - [x] 老服务正式注销 + 包名私有化
+- [x] 业务单元测试（11 个核心 Service / 90 用例 / 目标类行覆盖 **63.0%**）
 
 ### 🚧 下一步
 
@@ -664,7 +766,7 @@ cartItem.setProductId(sku.getProductId());      // 补全
 - [ ] 本地消息表（Outbox）可靠投递
 - [ ] 分布式链路追踪（SkyWalking / Zipkin）
 - [ ] 容器化部署（Docker Compose / K8s）
-- [ ] 单元测试与集成测试覆盖率提升
+- [ ] 集成测试（Testcontainers 拉起中间件，覆盖网关与跨服务调用）
 
 ---
 
