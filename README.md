@@ -629,7 +629,7 @@ cartItem.setProductId(sku.getProductId());      // 补全
 - **关键手法**：`mockStatic` 隔离支付宝验签与 `StpUtil`；`ArgumentCaptor` 断言落库对象与 `Example` 的 SQL 条件（服务端定价、归属校验）
 - **补测产出**：定位 6 处边界缺陷（负数量入库、优惠券门槛 `intValue()` 截断致券额可超订单额、促销缺行 NPE 等），仅登记未修
 
-> 口径：63.0% 的分母是这 11 个业务类，不是整个项目（模块级 33.0%）。
+> 口径：63.0% 的分母是这 11 个业务类，不是整个项目（6 个被测模块整体行覆盖 28.9%）。
 
 ```bash
 mvn -T 1C test     # 全量测试 + 报告：各模块 target/site/jacoco/index.html
