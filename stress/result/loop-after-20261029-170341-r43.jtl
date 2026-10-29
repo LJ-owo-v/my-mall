@@ -1,0 +1,19 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1793265026769,189,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-6,text,true,,461,235,9,9,http://127.0.0.1:8092/sso/login,187,0,34
+1793265026768,189,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-5,text,true,,461,237,9,9,http://127.0.0.1:8092/sso/login,188,0,34
+1793265026768,189,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-4,text,true,,461,235,9,9,http://127.0.0.1:8092/sso/login,188,0,35
+1793265026769,189,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-1,text,true,,461,235,9,9,http://127.0.0.1:8092/sso/login,187,0,34
+1793265026769,189,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-7,text,true,,461,236,9,9,http://127.0.0.1:8092/sso/login,187,0,33
+1793265026769,188,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-2,text,true,,461,236,9,9,http://127.0.0.1:8092/sso/login,187,0,33
+1793265026769,188,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-9,text,true,,462,237,9,9,http://127.0.0.1:8092/sso/login,187,0,33
+1793265026768,189,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-8,text,true,,461,236,9,9,http://127.0.0.1:8092/sso/login,188,0,34
+1793265026768,190,01 会员登录 /sso/login,200,,下单压测线程组（9 会员抢 10 件） 1-3,text,true,,461,239,9,9,http://127.0.0.1:8092/sso/login,188,0,35
+1793265027003,31,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-8,text,true,,1436,501,9,9,http://127.0.0.1:8092/order/generateOrder,30,0,2
+1793265027003,45,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-7,text,true,,1436,501,8,8,http://127.0.0.1:8092/order/generateOrder,44,0,2
+1793265027003,59,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-3,text,true,,1442,501,7,7,http://127.0.0.1:8092/order/generateOrder,58,0,2
+1793265027003,73,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-4,text,true,,1434,501,6,6,http://127.0.0.1:8092/order/generateOrder,72,0,2
+1793265027003,87,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-6,text,true,,1434,501,5,5,http://127.0.0.1:8092/order/generateOrder,86,0,3
+1793265027003,87,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-1,text,true,,242,494,5,5,http://127.0.0.1:8092/order/generateOrder,87,0,3
+1793265027003,88,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-5,text,true,,242,501,4,4,http://127.0.0.1:8092/order/generateOrder,88,0,2
+1793265027003,89,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-2,text,true,,242,501,3,3,http://127.0.0.1:8092/order/generateOrder,88,0,3
+1793265027003,90,03 生成订单 /order/generateOrder,200,,下单压测线程组（9 会员抢 10 件） 1-9,text,true,,242,496,2,2,http://127.0.0.1:8092/order/generateOrder,89,0,4
